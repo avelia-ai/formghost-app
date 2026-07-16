@@ -81,13 +81,26 @@ body{
 .app-nav{
   display:flex;align-items:center;justify-content:space-between;
   padding:18px 6vw;border-bottom:1px solid var(--line);
+  gap:20px;flex-wrap:wrap;
 }
 .app-logo{font-family:'Anton';font-size:18px}
+.app-tabs{display:flex;border:1px solid var(--line)}
+.app-tab{
+  padding:9px 20px;font-family:'IBM Plex Mono';font-size:12px;
+  color:var(--gray);background:transparent;border:none;cursor:pointer;
+  letter-spacing:0.04em;text-transform:uppercase;
+}
+.app-tab.active{background:var(--volt);color:var(--ink)}
 .btn-logout{
   background:transparent;border:1px solid var(--line);color:var(--gray);
   font-family:'IBM Plex Mono';font-size:12px;padding:8px 16px;cursor:pointer;
 }
 .btn-logout:hover{color:var(--white);border-color:var(--white)}
+
+.app-view{display:none}
+.app-view.active{display:block}
+
+/* CAPTURE VIEW */
 .capture-shell{
   padding:60px 6vw;max-width:600px;margin:0 auto;text-align:center;
 }
@@ -108,6 +121,49 @@ body{
   display:inline-block;font-family:'IBM Plex Mono';font-size:11px;
   color:var(--volt);border:1px solid var(--volt);padding:6px 14px;
 }
+
+/* PROFILE VIEW */
+.profile-shell{padding:56px 6vw;max-width:680px;margin:0 auto}
+.profile-header{
+  display:flex;align-items:center;gap:18px;
+  margin-bottom:40px;padding-bottom:32px;border-bottom:1px solid var(--line);
+}
+.profile-avatar{
+  width:60px;height:60px;background:var(--volt);color:var(--ink);
+  display:flex;align-items:center;justify-content:center;
+  font-family:'Anton';font-size:22px;flex-shrink:0;
+}
+.profile-name{font-family:'Anton';font-size:22px;margin-bottom:4px}
+.profile-email{color:var(--gray);font-size:13px;font-family:'IBM Plex Mono'}
+
+.profile-stats{
+  display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
+  background:var(--line);border:1px solid var(--line);margin-bottom:40px;
+}
+.profile-stat{background:var(--panel);padding:22px 20px}
+.profile-stat .l{font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
+.profile-stat .v{font-family:'Anton';font-size:30px;color:var(--white)}
+.profile-stat .v.hl{color:var(--volt)}
+
+.profile-section-title{
+  font-family:'IBM Plex Mono';font-size:12px;color:var(--gray);
+  text-transform:uppercase;letter-spacing:0.06em;margin-bottom:16px;
+}
+.session-row{
+  display:flex;justify-content:space-between;align-items:center;
+  padding:14px 0;border-bottom:1px solid var(--line);font-size:14px;
+}
+.session-row:last-child{border-bottom:none}
+.session-ex{font-weight:600}
+.session-date{color:var(--gray);font-size:11.5px;font-family:'IBM Plex Mono';margin-top:2px}
+.session-score{font-family:'Anton';color:var(--volt);font-size:18px}
+.empty-state{color:var(--gray);font-size:13.5px;padding:20px 0;font-family:'IBM Plex Mono'}
+.btn-danger{
+  background:transparent;border:1px solid var(--danger);color:var(--danger);
+  font-family:'IBM Plex Mono';font-size:12px;padding:10px 18px;
+  cursor:pointer;margin-top:36px;
+}
+.btn-danger:hover{background:rgba(255,107,92,0.1)}
 </style>
 </head>
 <body>
@@ -158,18 +214,55 @@ body{
 <div id="appPage">
   <div class="app-nav">
     <div class="app-logo">FORMGHOST</div>
+    <div class="app-tabs">
+      <button class="app-tab active" id="navCapture" onclick="switchAppView('capture')">Scan</button>
+      <button class="app-tab" id="navProfile" onclick="switchAppView('profile')">Profil</button>
+    </div>
     <button class="btn-logout" onclick="logout()">Déconnexion</button>
   </div>
-  <div class="capture-shell">
-    <div class="soon-badge">BÊTA — CAPTURE BIENTÔT DISPONIBLE</div>
-    <h1 style="margin-top:20px">Prêt pour ton premier scan</h1>
-    <p>La détection de pose en direct arrive dans la prochaine mise à jour. Ton compte est prêt.</p>
-    <div class="camera-frame">
-      <div class="tag">FORMGHOST_SCAN.001</div>
-      <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-        <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-        <circle cx="12" cy="13" r="4"/>
-      </svg>
+
+  <div id="captureView" class="app-view active">
+    <div class="capture-shell">
+      <div class="soon-badge">BÊTA — CAPTURE BIENTÔT DISPONIBLE</div>
+      <h1 style="margin-top:20px">Prêt pour ton premier scan</h1>
+      <p>La détection de pose en direct arrive dans la prochaine mise à jour. Ton compte est prêt.</p>
+      <div class="camera-frame">
+        <div class="tag">FORMGHOST_SCAN.001</div>
+        <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+          <circle cx="12" cy="13" r="4"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+
+  <div id="profileView" class="app-view">
+    <div class="profile-shell">
+      <div class="profile-header">
+        <div class="profile-avatar" id="profileAvatar">--</div>
+        <div>
+          <div class="profile-name" id="profileName">—</div>
+          <div class="profile-email" id="profileEmail">—</div>
+        </div>
+      </div>
+
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <div class="l">Séances totales</div>
+          <div class="v hl" id="statTotal">0</div>
+        </div>
+        <div class="profile-stat">
+          <div class="l">Score moyen</div>
+          <div class="v" id="statAvg">—</div>
+        </div>
+      </div>
+
+      <div class="profile-section-title">Dernières séances</div>
+      <div id="sessionsList">
+        <div class="empty-state">Chargement...</div>
+      </div>
+
+      <button class="btn-danger" onclick="logout()">Se déconnecter</button>
     </div>
   </div>
 </div>
@@ -178,6 +271,7 @@ body{
 const SUPABASE_URL = 'https://vbzeklhhdagsoxjxazsl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiemVrbGhoZGFnc294anhhenNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDQxNDQsImV4cCI6MjA5NjY4MDE0NH0.izZr6ByPmyNfg9YXSrUzaT1goyf7d8mNV_OHjPjFLf0';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const BACKEND_URL = 'https://formghost-backend-production.up.railway.app';
 
 function switchTab(tab) {
   document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
@@ -259,6 +353,56 @@ async function logout() {
 function showApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('appPage').classList.add('active');
+  switchAppView('capture');
+}
+
+function switchAppView(view) {
+  document.getElementById('navCapture').classList.toggle('active', view === 'capture');
+  document.getElementById('navProfile').classList.toggle('active', view === 'profile');
+  document.getElementById('captureView').classList.toggle('active', view === 'capture');
+  document.getElementById('profileView').classList.toggle('active', view === 'profile');
+  if (view === 'profile') loadProfileView();
+}
+
+async function loadProfileView() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (!user) return;
+
+  const name = user.user_metadata?.full_name || user.email.split('@')[0];
+  const initials = name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().slice(0, 2);
+
+  document.getElementById('profileAvatar').textContent = initials;
+  document.getElementById('profileName').textContent = name;
+  document.getElementById('profileEmail').textContent = user.email;
+
+  try {
+    const res = await fetch(BACKEND_URL + '/api/sessions/' + user.id);
+    const json = await res.json();
+    const sessions = json.sessions || [];
+
+    document.getElementById('statTotal').textContent = sessions.length;
+
+    const scored = sessions.filter(function(s) { return typeof s.score === 'number'; });
+    if (scored.length > 0) {
+      const avg = scored.reduce(function(sum, s) { return sum + s.score; }, 0) / scored.length;
+      document.getElementById('statAvg').textContent = Math.round(avg) + '%';
+    } else {
+      document.getElementById('statAvg').textContent = '—';
+    }
+
+    const listEl = document.getElementById('sessionsList');
+    if (sessions.length === 0) {
+      listEl.innerHTML = '<div class="empty-state">Aucune séance enregistrée pour l\'instant. Ton premier scan apparaîtra ici.</div>';
+    } else {
+      listEl.innerHTML = sessions.slice(0, 5).map(function(s) {
+        const date = new Date(s.created_at).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+        const scoreLabel = typeof s.score === 'number' ? s.score + '%' : '—';
+        return '<div class="session-row"><div><div class="session-ex">' + s.exercise + '</div><div class="session-date">' + date + '</div></div><div class="session-score">' + scoreLabel + '</div></div>';
+      }).join('');
+    }
+  } catch (err) {
+    document.getElementById('sessionsList').innerHTML = '<div class="empty-state">Impossible de charger les séances pour le moment.</div>';
+  }
 }
 
 async function checkSession() {
