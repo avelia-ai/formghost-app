@@ -103,25 +103,44 @@ body{
 
 /* CAPTURE VIEW */
 .capture-shell{
-  padding:60px 6vw;max-width:600px;margin:0 auto;text-align:center;
+  padding:48px 6vw 60px;max-width:600px;margin:0 auto;text-align:center;
 }
-.capture-shell h1{font-family:'Anton';font-size:clamp(28px,4vw,40px);margin-bottom:14px}
-.capture-shell p{color:var(--gray);font-size:15px;margin-bottom:36px}
+.capture-shell h1{font-family:'Anton';font-size:clamp(26px,4vw,38px);margin-bottom:12px}
+.capture-shell p{color:var(--gray);font-size:14px;margin-bottom:28px}
 .camera-frame{
-  aspect-ratio:3/4;max-width:340px;margin:0 auto 24px;
+  aspect-ratio:3/4;max-width:340px;margin:0 auto 20px;
   background:var(--panel);border:1px solid var(--line);
   display:flex;align-items:center;justify-content:center;
-  position:relative;
+  position:relative;overflow:hidden;
 }
 .camera-frame .tag{
   position:absolute;top:14px;left:14px;font-family:'IBM Plex Mono';
-  font-size:10px;color:var(--gray);
+  font-size:10px;color:var(--gray);z-index:4;
 }
 .camera-icon{width:56px;height:56px;color:var(--gray)}
-.soon-badge{
-  display:inline-block;font-family:'IBM Plex Mono';font-size:11px;
-  color:var(--volt);border:1px solid var(--volt);padding:6px 14px;
+.live-readout{
+  position:absolute;bottom:14px;left:14px;right:14px;
+  background:rgba(14,14,14,0.82);border:1px solid var(--line);
+  padding:12px 14px;z-index:4;
 }
+.readout-row{display:flex;justify-content:space-between;font-size:12px;font-family:'IBM Plex Mono';margin-bottom:6px}
+.readout-row:last-child{margin-bottom:0}
+.readout-row .ok{color:var(--white)}
+.readout-row .hl{color:var(--volt)}
+.rec-dot{
+  position:absolute;top:14px;right:14px;z-index:4;
+  display:flex;align-items:center;gap:6px;
+  font-family:'IBM Plex Mono';font-size:10px;color:var(--danger);
+}
+.rec-dot::before{content:'';width:6px;height:6px;background:var(--danger);border-radius:50%}
+.scan-status{font-size:12px;color:var(--gray);margin:6px 0 20px;min-height:16px;font-family:'IBM Plex Mono'}
+.btn-scan{
+  background:var(--volt);color:var(--ink);border:none;
+  padding:15px 30px;font-family:'Anton';font-size:15px;
+  cursor:pointer;letter-spacing:0.02em;width:100%;max-width:340px;
+}
+.btn-scan.stop{background:var(--danger);color:#fff}
+.btn-scan:disabled{opacity:0.5;cursor:default}
 
 /* PROFILE VIEW */
 .profile-shell{padding:48px 6vw 80px;max-width:520px;margin:0 auto}
@@ -267,16 +286,26 @@ select.field-underline option{background:var(--panel);color:var(--white)}
 
   <div id="captureView" class="app-view active">
     <div class="capture-shell">
-      <div class="soon-badge">BÊTA — CAPTURE BIENTÔT DISPONIBLE</div>
-      <h1 style="margin-top:20px">Prêt pour ton premier scan</h1>
-      <p>La détection de pose en direct arrive dans la prochaine mise à jour. Ton compte est prêt.</p>
+      <div id="captureIntro">
+        <h1>Lance ton scan</h1>
+        <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
+      </div>
       <div class="camera-frame">
         <div class="tag">FORMGHOST_SCAN.001</div>
-        <svg class="camera-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <div class="rec-dot" id="recDot" style="display:none">LIVE</div>
+        <video id="videoFeed" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;transform:scaleX(-1)"></video>
+        <canvas id="overlayCanvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)"></canvas>
+        <svg class="camera-icon" id="cameraPlaceholderIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
           <circle cx="12" cy="13" r="4"/>
         </svg>
+        <div class="live-readout" id="liveReadout" style="display:none">
+          <div class="readout-row"><span>Angle genou</span><span id="readoutAngle" class="ok">—</span></div>
+          <div class="readout-row"><span>Meilleur score</span><span id="readoutBest" class="hl">—</span></div>
+        </div>
       </div>
+      <div class="scan-status mono" id="scanStatus"></div>
+      <button class="btn-scan" id="scanBtn" onclick="toggleScan()">Démarrer le scan</button>
     </div>
   </div>
 
@@ -369,6 +398,7 @@ const SUPABASE_URL = 'https://vbzeklhhdagsoxjxazsl.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiemVrbGhoZGFnc294anhhenNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDQxNDQsImV4cCI6MjA5NjY4MDE0NH0.izZr6ByPmyNfg9YXSrUzaT1goyf7d8mNV_OHjPjFLf0';
 const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const BACKEND_URL = 'https://formghost-backend-production.up.railway.app';
+window.BACKEND_URL = BACKEND_URL;
 
 function switchTab(tab) {
   document.getElementById('tabLogin').classList.toggle('active', tab === 'login');
@@ -447,9 +477,15 @@ async function logout() {
   document.getElementById('authPage').classList.remove('hidden');
 }
 
+async function setCurrentUser() {
+  const { data: { user } } = await supabaseClient.auth.getUser();
+  if (user) window.currentUserId = user.id;
+}
+
 function showApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('appPage').classList.add('active');
+  setCurrentUser();
   switchAppView('capture');
 }
 
@@ -461,12 +497,10 @@ function switchAppView(view) {
   if (view === 'profile') loadProfileView();
 }
 
-let currentUserId = null;
-
 async function loadProfileView() {
   const { data: { user } } = await supabaseClient.auth.getUser();
   if (!user) return;
-  currentUserId = user.id;
+  window.currentUserId = user.id;
 
   const name = user.user_metadata?.full_name || user.email.split('@')[0];
   const initials = name.split(' ').map(function(n) { return n[0]; }).join('').toUpperCase().slice(0, 2);
@@ -521,7 +555,7 @@ async function loadProfileView() {
 }
 
 async function saveProfile() {
-  if (!currentUserId) return;
+  if (!window.currentUserId) return;
   const btn = document.getElementById('saveBtn');
   const feedback = document.getElementById('saveFeedback');
   btn.disabled = true;
@@ -540,7 +574,7 @@ async function saveProfile() {
   };
 
   try {
-    await fetch(BACKEND_URL + '/api/profile/' + currentUserId, {
+    await fetch(BACKEND_URL + '/api/profile/' + window.currentUserId, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -559,6 +593,194 @@ async function checkSession() {
 }
 
 checkSession();
+</script>
+
+<script type="module">
+import { PoseLandmarker, FilesetResolver } from "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14";
+
+let poseLandmarker = null;
+let scanning = false;
+let animFrameId = null;
+let bestScore = null;
+let video, canvas, ctx;
+let sessionStartTime = null;
+
+async function initPoseLandmarker() {
+  const vision = await FilesetResolver.forVisionTasks(
+    "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
+  );
+  poseLandmarker = await PoseLandmarker.createFromOptions(vision, {
+    baseOptions: {
+      modelAssetPath: "https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_lite/float16/1/pose_landmarker_lite.task",
+      delegate: "GPU"
+    },
+    runningMode: "VIDEO",
+    numPoses: 1
+  });
+}
+
+function angleBetween(a, b, c) {
+  const ab = { x: a.x - b.x, y: a.y - b.y };
+  const cb = { x: c.x - b.x, y: c.y - b.y };
+  const dot = ab.x * cb.x + ab.y * cb.y;
+  const magAB = Math.sqrt(ab.x * ab.x + ab.y * ab.y);
+  const magCB = Math.sqrt(cb.x * cb.x + cb.y * cb.y);
+  const cosAngle = dot / (magAB * magCB);
+  return Math.acos(Math.min(1, Math.max(-1, cosAngle))) * (180 / Math.PI);
+}
+
+function drawSkeleton(landmarks) {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const connections = [
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [11,23],[12,24],[23,24],
+    [23,25],[25,27],[24,26],[26,28],
+    [27,29],[29,31],[28,30],[30,32]
+  ];
+  ctx.strokeStyle = '#ECE7DD';
+  ctx.lineWidth = 3;
+  connections.forEach(function(c) {
+    const p1 = landmarks[c[0]];
+    const p2 = landmarks[c[1]];
+    if (!p1 || !p2) return;
+    ctx.beginPath();
+    ctx.moveTo(p1.x * canvas.width, p1.y * canvas.height);
+    ctx.lineTo(p2.x * canvas.width, p2.y * canvas.height);
+    ctx.stroke();
+  });
+  landmarks.forEach(function(p) {
+    ctx.beginPath();
+    ctx.arc(p.x * canvas.width, p.y * canvas.height, 4, 0, 2 * Math.PI);
+    ctx.fillStyle = '#D6FF3D';
+    ctx.fill();
+  });
+}
+
+function detectLoop() {
+  if (!scanning) return;
+  const now = performance.now();
+  const result = poseLandmarker.detectForVideo(video, now);
+  if (result.landmarks && result.landmarks[0]) {
+    const lm = result.landmarks[0];
+    drawSkeleton(lm);
+    const hip = lm[24], knee = lm[26], ankle = lm[28];
+    if (hip && knee && ankle) {
+      const angle = angleBetween(hip, knee, ankle);
+      document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
+      const score = Math.max(0, Math.min(100, Math.round(100 - Math.abs(angle - 90) * 1.1)));
+      if (bestScore === null || score > bestScore) {
+        bestScore = score;
+        document.getElementById('readoutBest').textContent = bestScore + '%';
+      }
+    }
+  }
+  animFrameId = requestAnimationFrame(detectLoop);
+}
+
+async function toggleScan() {
+  if (!scanning) {
+    await startScan();
+  } else {
+    await stopScan();
+  }
+}
+
+async function startScan() {
+  const btn = document.getElementById('scanBtn');
+  const status = document.getElementById('scanStatus');
+  btn.disabled = true;
+  status.textContent = 'Chargement du modele...';
+
+  if (!poseLandmarker) {
+    try {
+      await initPoseLandmarker();
+    } catch (err) {
+      status.textContent = 'Erreur de chargement du modele.';
+      btn.disabled = false;
+      return;
+    }
+  }
+
+  video = document.getElementById('videoFeed');
+  canvas = document.getElementById('overlayCanvas');
+  ctx = canvas.getContext('2d');
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'user' } });
+    video.srcObject = stream;
+    await new Promise(function(resolve) { video.onloadedmetadata = resolve; });
+    canvas.width = video.videoWidth;
+    canvas.height = video.videoHeight;
+  } catch (err) {
+    status.textContent = 'Acces camera refuse.';
+    btn.disabled = false;
+    return;
+  }
+
+  document.getElementById('cameraPlaceholderIcon').style.display = 'none';
+  video.style.display = 'block';
+  canvas.style.display = 'block';
+  document.getElementById('liveReadout').style.display = 'block';
+  document.getElementById('recDot').style.display = 'flex';
+  document.getElementById('captureIntro').style.display = 'none';
+
+  bestScore = null;
+  sessionStartTime = Date.now();
+  scanning = true;
+  btn.disabled = false;
+  btn.textContent = 'Terminer le scan';
+  btn.classList.add('stop');
+  status.textContent = 'Scan en cours...';
+
+  detectLoop();
+}
+
+async function stopScan() {
+  scanning = false;
+  if (animFrameId) cancelAnimationFrame(animFrameId);
+
+  if (video.srcObject) {
+    video.srcObject.getTracks().forEach(function(t) { t.stop(); });
+  }
+
+  const btn = document.getElementById('scanBtn');
+  const status = document.getElementById('scanStatus');
+  btn.textContent = 'Démarrer le scan';
+  btn.classList.remove('stop');
+
+  const duration = Math.round((Date.now() - sessionStartTime) / 1000);
+
+  if (bestScore !== null && window.currentUserId) {
+    status.textContent = 'Enregistrement de la seance...';
+    try {
+      await fetch(window.BACKEND_URL + '/api/sessions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: window.currentUserId,
+          exercise: 'Squat',
+          score: bestScore,
+          feedback: { angle_min: 90 },
+          duration: duration
+        })
+      });
+      status.textContent = 'Seance enregistree — meilleur score ' + bestScore + '%.';
+    } catch (err) {
+      status.textContent = 'Seance terminee (non enregistree).';
+    }
+  } else {
+    status.textContent = 'Scan arrete.';
+  }
+
+  video.style.display = 'none';
+  canvas.style.display = 'none';
+  document.getElementById('cameraPlaceholderIcon').style.display = 'block';
+  document.getElementById('liveReadout').style.display = 'none';
+  document.getElementById('recDot').style.display = 'none';
+  document.getElementById('captureIntro').style.display = 'block';
+}
+
+window.toggleScan = toggleScan;
 </script>
 
 </body>
