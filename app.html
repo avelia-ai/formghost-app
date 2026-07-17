@@ -288,6 +288,13 @@ select.field-underline option{background:var(--panel);color:var(--white)}
   cursor:pointer;margin-top:32px;
 }
 .btn-danger:hover{background:rgba(255,107,92,0.1)}
+
+.progress-compare{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:20px}
+.progress-slot-label{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:8px;text-align:center}
+.progress-photo-frame{aspect-ratio:3/4;background:var(--panel);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+.progress-photo-frame img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
+.progress-upload-btn{font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);border:1px dashed var(--line);padding:10px 14px;cursor:pointer;text-align:center;z-index:2;position:relative}
+.progress-photo-date{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray-dim);text-align:center;margin-top:6px}
 </style>
 </head>
 <body>
@@ -340,6 +347,7 @@ select.field-underline option{background:var(--panel);color:var(--white)}
     <div class="app-logo" onclick="window.location.href='index.html'" style="cursor:pointer">FORMGHOST</div>
     <div class="app-tabs">
       <button class="app-tab active" id="navCapture" onclick="switchAppView('capture')">Scan</button>
+      <button class="app-tab" id="navProgress" onclick="switchAppView('progress')">Progrès</button>
       <button class="app-tab" id="navProfile" onclick="switchAppView('profile')">Profil</button>
     </div>
     <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -439,6 +447,33 @@ select.field-underline option{background:var(--panel);color:var(--white)}
         <button class="btn-results-secondary" onclick="switchAppView('profile')">Voir dans mon profil</button>
       </div>
 
+    </div>
+  </div>
+
+  <div id="progressView" class="app-view">
+    <div class="profile-shell">
+      <div class="section-title">Avant / Après</div>
+      <div class="progress-compare">
+        <div class="progress-slot">
+          <div class="progress-slot-label">Avant</div>
+          <div class="progress-photo-frame" id="beforeFrame">
+            <input type="file" accept="image/*" id="beforeInput" onchange="uploadProgressPhoto('before', this)" style="display:none">
+            <div class="progress-upload-btn" onclick="document.getElementById('beforeInput').click()">+ Ajouter</div>
+            <img id="beforeImg" style="display:none">
+          </div>
+          <div class="progress-photo-date" id="beforeDate"></div>
+        </div>
+        <div class="progress-slot">
+          <div class="progress-slot-label">Après</div>
+          <div class="progress-photo-frame" id="afterFrame">
+            <input type="file" accept="image/*" id="afterInput" onchange="uploadProgressPhoto('after', this)" style="display:none">
+            <div class="progress-upload-btn" onclick="document.getElementById('afterInput').click()">+ Ajouter</div>
+            <img id="afterImg" style="display:none">
+          </div>
+          <div class="progress-photo-date" id="afterDate"></div>
+        </div>
+      </div>
+      <div class="scan-status mono" id="progressStatus"></div>
     </div>
   </div>
 
@@ -650,10 +685,67 @@ function showApp() {
 
 function switchAppView(view) {
   document.getElementById('navCapture').classList.toggle('active', view === 'capture');
+  document.getElementById('navProgress').classList.toggle('active', view === 'progress');
   document.getElementById('navProfile').classList.toggle('active', view === 'profile');
   document.getElementById('captureView').classList.toggle('active', view === 'capture');
+  document.getElementById('progressView').classList.toggle('active', view === 'progress');
   document.getElementById('profileView').classList.toggle('active', view === 'profile');
   if (view === 'profile') loadProfileView();
+  if (view === 'progress') loadProgressView();
+}
+
+async function uploadProgressPhoto(type, inputEl) {
+  var file = inputEl.files[0];
+  if (!file || !window.currentUserId) return;
+  document.getElementById('progressStatus').textContent = 'Upload en cours...';
+
+  var path = window.currentUserId + '/' + type + '_' + Date.now() + '.jpg';
+  var uploadRes = await supabaseClient.storage.from('progress-photos').upload(path, file);
+  if (uploadRes.error) {
+    document.getElementById('progressStatus').textContent = 'Erreur upload: ' + uploadRes.error.message;
+    return;
+  }
+
+  try {
+    await fetch(BACKEND_URL + '/api/progress-photos', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: window.currentUserId, photo_type: type, storage_path: path })
+    });
+  } catch (err) {}
+
+  document.getElementById('progressStatus').textContent = '';
+  loadProgressView();
+}
+
+async function loadProgressView() {
+  if (!window.currentUserId) return;
+  try {
+    const res = await fetch(BACKEND_URL + '/api/progress-photos/' + window.currentUserId);
+    const json = await res.json();
+    const photos = json.photos || [];
+    var before = photos.find(function(p) { return p.photo_type === 'before'; });
+    var after = photos.find(function(p) { return p.photo_type === 'after'; });
+
+    if (before) {
+      var signedBefore = await supabaseClient.storage.from('progress-photos').createSignedUrl(before.storage_path, 3600);
+      if (signedBefore.data) {
+        document.getElementById('beforeImg').src = signedBefore.data.signedUrl;
+        document.getElementById('beforeImg').style.display = 'block';
+        document.getElementById('beforeFrame').querySelector('.progress-upload-btn').style.display = 'none';
+        document.getElementById('beforeDate').textContent = new Date(before.created_at).toLocaleDateString('fr-FR');
+      }
+    }
+    if (after) {
+      var signedAfter = await supabaseClient.storage.from('progress-photos').createSignedUrl(after.storage_path, 3600);
+      if (signedAfter.data) {
+        document.getElementById('afterImg').src = signedAfter.data.signedUrl;
+        document.getElementById('afterImg').style.display = 'block';
+        document.getElementById('afterFrame').querySelector('.progress-upload-btn').style.display = 'none';
+        document.getElementById('afterDate').textContent = new Date(after.created_at).toLocaleDateString('fr-FR');
+      }
+    }
+  } catch (err) {}
 }
 
 async function loadProfileView() {
