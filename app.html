@@ -857,6 +857,8 @@ let currentRepMinAngle = null;
 let repDownStartTime = null;
 let repBottomTime = null;
 let repTempos = [];
+let positioned = false;
+let positioningStartTime = null;
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -870,6 +872,15 @@ async function initPoseLandmarker() {
     runningMode: "VIDEO",
     numPoses: 1
   });
+}
+
+function isFullyVisible(lm) {
+  var idxs = [11, 12, 23, 24, 25, 26, 27, 28];
+  for (var i = 0; i < idxs.length; i++) {
+    var p = lm[idxs[i]];
+    if (!p || (typeof p.visibility === 'number' && p.visibility < 0.5)) return false;
+  }
+  return true;
 }
 
 function angleBetween(a, b, c) {
@@ -959,6 +970,26 @@ function detectLoop() {
   if (result.landmarks && result.landmarks[0]) {
     const lm = result.landmarks[0];
     drawSkeleton(lm);
+
+    if (!positioned) {
+      if (isFullyVisible(lm)) {
+        if (!positioningStartTime) positioningStartTime = performance.now();
+        var elapsed = (performance.now() - positioningStartTime) / 1000;
+        document.getElementById('scanStatus').textContent = 'Bien positionne, maintiens la pose...';
+        if (elapsed >= 1.2) {
+          positioned = true;
+          document.getElementById('scanStatus').textContent = 'Scan en cours...';
+          document.getElementById('recDot').style.display = 'flex';
+          sessionStartTime = Date.now();
+        }
+      } else {
+        positioningStartTime = null;
+        document.getElementById('scanStatus').textContent = 'Recule-toi pour etre visible en entier (tete aux pieds)';
+      }
+      animFrameId = requestAnimationFrame(detectLoop);
+      return;
+    }
+
     const prevMinAngle = minRightKneeAngle;
     const angle = trackMetrics(lm);
     if (angle !== null) {
@@ -1047,7 +1078,7 @@ async function startScan() {
   video.style.display = 'block';
   canvas.style.display = 'block';
   document.getElementById('liveReadout').style.display = 'block';
-  document.getElementById('recDot').style.display = 'flex';
+  document.getElementById('recDot').style.display = 'none';
   document.getElementById('captureIntro').style.display = 'none';
 
   bestScore = null;
@@ -1064,13 +1095,15 @@ async function startScan() {
   repDownStartTime = null;
   repBottomTime = null;
   repTempos = [];
+  positioned = false;
+  positioningStartTime = null;
   sessionStartTime = Date.now();
   document.getElementById('readoutReps').textContent = '0';
   scanning = true;
   btn.disabled = false;
   btn.textContent = 'Terminer le scan';
   btn.classList.add('stop');
-  status.textContent = 'Scan en cours...';
+  status.textContent = 'Place-toi bien dans le cadre, corps entier visible.';
 
   detectLoop();
 }
