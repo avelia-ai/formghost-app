@@ -443,6 +443,7 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <div class="t" id="adviceText">—</div>
         </div>
 
+        <a class="btn-results-secondary" id="downloadClipBtn" style="display:none;text-decoration:none;margin-bottom:10px" download="formghost-scan.webm">Télécharger le clip</a>
         <button class="btn-results-primary" onclick="resetScan()">Nouveau scan</button>
         <button class="btn-results-secondary" onclick="switchAppView('profile')">Voir dans mon profil</button>
       </div>
@@ -1043,6 +1044,10 @@ let repTempos = [];
 let positioned = false;
 let positioningStartTime = null;
 let currentExercise = 'squat';
+let mediaRecorder = null;
+let recordedChunks = [];
+let compositeCanvas = null;
+let compositeCtx = null;
 
 var EXERCISE_CONFIG = {
   squat: {
@@ -1080,6 +1085,60 @@ async function initPoseLandmarker() {
     runningMode: "VIDEO",
     numPoses: 1
   });
+}
+
+function drawComposite(lm) {
+  if (!compositeCtx) return;
+  var cw = compositeCanvas.width, ch = compositeCanvas.height;
+  var vw = video.videoWidth, vh = video.videoHeight;
+  if (!vw || !vh) return;
+  var targetRatio = cw / ch;
+  var srcRatio = vw / vh;
+  var sx, sy, sw, sh;
+  if (srcRatio > targetRatio) {
+    sh = vh; sw = vh * targetRatio; sx = (vw - sw) / 2; sy = 0;
+  } else {
+    sw = vw; sh = vw / targetRatio; sx = 0; sy = (vh - sh) / 2;
+  }
+
+  compositeCtx.save();
+  compositeCtx.translate(cw, 0);
+  compositeCtx.scale(-1, 1);
+  compositeCtx.drawImage(video, sx, sy, sw, sh, 0, 0, cw, ch);
+
+  function toX(nx) { return ((nx * vw) - sx) / sw * cw; }
+  function toY(ny) { return ((ny * vh) - sy) / sh * ch; }
+
+  var connections = [
+    [11,12],[11,13],[13,15],[12,14],[14,16],
+    [11,23],[12,24],[23,24],
+    [23,25],[25,27],[24,26],[26,28],
+    [27,29],[29,31],[28,30],[30,32]
+  ];
+  compositeCtx.strokeStyle = '#ECE7DD';
+  compositeCtx.lineWidth = 4;
+  connections.forEach(function(c) {
+    var p1 = lm[c[0]], p2 = lm[c[1]];
+    if (!p1 || !p2) return;
+    compositeCtx.beginPath();
+    compositeCtx.moveTo(toX(p1.x), toY(p1.y));
+    compositeCtx.lineTo(toX(p2.x), toY(p2.y));
+    compositeCtx.stroke();
+  });
+  for (var i = 11; i <= 32; i++) {
+    var p = lm[i];
+    if (!p) continue;
+    compositeCtx.beginPath();
+    compositeCtx.arc(toX(p.x), toY(p.y), 5, 0, 2 * Math.PI);
+    compositeCtx.fillStyle = '#D6FF3D';
+    compositeCtx.fill();
+  }
+
+  compositeCtx.restore();
+
+  compositeCtx.fillStyle = 'rgba(255,255,255,0.9)';
+  compositeCtx.font = 'bold 26px Arial';
+  compositeCtx.fillText('FORMGHOST', 24, ch - 34);
 }
 
 function isFullyVisible(lm) {
@@ -1220,6 +1279,7 @@ function detectLoop() {
   if (result.landmarks && result.landmarks[0]) {
     const lm = result.landmarks[0];
     drawSkeleton(lm);
+    drawComposite(lm);
 
     if (!positioned) {
       if (isFullyVisible(lm)) {
@@ -1327,6 +1387,24 @@ async function startScan() {
   document.getElementById('cameraPlaceholderIcon').style.display = 'none';
   video.style.display = 'block';
   canvas.style.display = 'block';
+  document.getElementById('downloadClipBtn').style.display = 'none';
+
+  try {
+    compositeCanvas = document.createElement('canvas');
+    compositeCanvas.width = 720;
+    compositeCanvas.height = 1280;
+    compositeCtx = compositeCanvas.getContext('2d');
+    recordedChunks = [];
+    var recStream = compositeCanvas.captureStream(30);
+    var mimeType = (window.MediaRecorder && MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) ? 'video/webm;codecs=vp9' : 'video/webm';
+    mediaRecorder = new MediaRecorder(recStream, { mimeType: mimeType });
+    mediaRecorder.ondataavailable = function(e) {
+      if (e.data.size > 0) recordedChunks.push(e.data);
+    };
+    mediaRecorder.start();
+  } catch (err) {
+    mediaRecorder = null;
+  }
   document.getElementById('liveReadout').style.display = 'block';
   document.getElementById('recDot').style.display = 'none';
   document.getElementById('captureIntro').style.display = 'none';
@@ -1587,6 +1665,19 @@ async function stopScan() {
     document.getElementById('scanStatus').textContent = 'Aucune donnee capturee. Reessaie en te plaçant bien dans le cadre.';
     document.getElementById('captureIntro').style.display = 'block';
     return;
+  }
+
+  if (mediaRecorder && mediaRecorder.state !== 'inactive') {
+    mediaRecorder.onstop = function() {
+      if (recordedChunks.length > 0) {
+        var blob = new Blob(recordedChunks, { type: 'video/webm' });
+        var url = URL.createObjectURL(blob);
+        var dlBtn = document.getElementById('downloadClipBtn');
+        dlBtn.href = url;
+        dlBtn.style.display = 'block';
+      }
+    };
+    mediaRecorder.stop();
   }
 
   const metrics = showResults();
