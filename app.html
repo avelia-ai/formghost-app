@@ -142,6 +142,42 @@ body{
 .btn-scan.stop{background:var(--danger);color:#fff}
 .btn-scan:disabled{opacity:0.5;cursor:default}
 
+/* RESULTS VIEW */
+#scanResults{display:none;max-width:400px;margin:0 auto;text-align:left}
+.results-header{text-align:center;margin-bottom:24px}
+.results-header .tag-label{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px}
+.results-score{font-family:'Anton';font-size:52px;color:var(--volt);line-height:1}
+.results-score-label{font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);margin-top:4px}
+.risk-banner{
+  background:rgba(214,255,61,0.08);border:1px solid rgba(214,255,61,0.3);
+  padding:12px 14px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;
+}
+.risk-banner.risk-modere{background:rgba(255,138,0,0.08);border-color:rgba(255,138,0,0.35)}
+.risk-banner.risk-eleve{background:rgba(255,107,92,0.1);border-color:rgba(255,107,92,0.4)}
+.risk-banner .l{font-family:'IBM Plex Mono';font-size:11px;color:var(--volt);text-transform:uppercase;letter-spacing:0.05em}
+.risk-modere .l{color:#FF8A00}
+.risk-eleve .l{color:var(--danger)}
+.risk-banner .v{font-family:'Anton';font-size:14px;color:var(--white)}
+.results-section-title{font-family:'IBM Plex Mono';font-size:10px;color:var(--volt);text-transform:uppercase;letter-spacing:0.12em;margin-bottom:16px}
+.metric-row{border-bottom:1px solid var(--line);padding:12px 0;display:flex;justify-content:space-between;align-items:center;font-size:14px}
+.metric-row:last-child{border-bottom:none}
+.metric-badge{font-family:'IBM Plex Mono';font-size:11px;padding:3px 10px;border:1px solid}
+.metric-badge.bon{color:var(--volt);border-color:var(--volt)}
+.metric-badge.moyen{color:var(--gray);border-color:var(--gray)}
+.metric-badge.mauvais{color:var(--danger);border-color:var(--danger)}
+.advice-box{border-left:2px solid var(--volt);padding-left:12px;margin:24px 0 28px}
+.advice-box .l{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.06em;margin-bottom:6px}
+.advice-box .t{font-size:14px;color:var(--white);line-height:1.5}
+.btn-results-primary{
+  background:var(--volt);color:var(--ink);text-align:center;padding:14px;
+  font-family:'Anton';font-size:14px;letter-spacing:0.02em;cursor:pointer;margin-bottom:10px;border:none;width:100%;
+}
+.btn-results-secondary{
+  text-align:center;padding:12px;border:1px solid var(--line);color:var(--gray);
+  font-family:'IBM Plex Mono';font-size:11px;letter-spacing:0.05em;text-transform:uppercase;cursor:pointer;
+  background:transparent;width:100%;
+}
+
 /* PROFILE VIEW */
 .profile-shell{padding:48px 6vw 80px;max-width:520px;margin:0 auto}
 .profile-header{
@@ -286,26 +322,69 @@ select.field-underline option{background:var(--panel);color:var(--white)}
 
   <div id="captureView" class="app-view active">
     <div class="capture-shell">
-      <div id="captureIntro">
-        <h1>Lance ton scan</h1>
-        <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
-      </div>
-      <div class="camera-frame">
-        <div class="tag">FORMGHOST_SCAN.001</div>
-        <div class="rec-dot" id="recDot" style="display:none">LIVE</div>
-        <video id="videoFeed" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;transform:scaleX(-1)"></video>
-        <canvas id="overlayCanvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)"></canvas>
-        <svg class="camera-icon" id="cameraPlaceholderIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
-          <circle cx="12" cy="13" r="4"/>
-        </svg>
-        <div class="live-readout" id="liveReadout" style="display:none">
-          <div class="readout-row"><span>Angle genou</span><span id="readoutAngle" class="ok">—</span></div>
-          <div class="readout-row"><span>Meilleur score</span><span id="readoutBest" class="hl">—</span></div>
+
+      <div id="scanControls">
+        <div id="captureIntro">
+          <h1>Lance ton scan</h1>
+          <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
         </div>
+        <div class="camera-frame">
+          <div class="tag">FORMGHOST_SCAN.001</div>
+          <div class="rec-dot" id="recDot" style="display:none">LIVE</div>
+          <video id="videoFeed" autoplay playsinline muted style="display:none;width:100%;height:100%;object-fit:cover;position:absolute;inset:0;transform:scaleX(-1)"></video>
+          <canvas id="overlayCanvas" style="display:none;position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1)"></canvas>
+          <svg class="camera-icon" id="cameraPlaceholderIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+            <circle cx="12" cy="13" r="4"/>
+          </svg>
+          <div class="live-readout" id="liveReadout" style="display:none">
+            <div class="readout-row"><span>Angle genou</span><span id="readoutAngle" class="ok">—</span></div>
+            <div class="readout-row"><span>Meilleur score</span><span id="readoutBest" class="hl">—</span></div>
+          </div>
+        </div>
+        <div class="scan-status mono" id="scanStatus"></div>
+        <button class="btn-scan" id="scanBtn" onclick="toggleScan()">Démarrer le scan</button>
       </div>
-      <div class="scan-status mono" id="scanStatus"></div>
-      <button class="btn-scan" id="scanBtn" onclick="toggleScan()">Démarrer le scan</button>
+
+      <div id="scanResults">
+        <div class="results-header">
+          <div class="tag-label">Squat terminé</div>
+          <div class="results-score" id="resultScore">—</div>
+          <div class="results-score-label">score global</div>
+        </div>
+
+        <div class="risk-banner" id="riskBanner">
+          <span class="l">Risque de blessure</span>
+          <span class="v" id="riskLabel">—</span>
+        </div>
+
+        <div class="results-section-title">Détail de l'analyse</div>
+        <div class="metric-row">
+          <span>Profondeur</span>
+          <span class="metric-badge" id="badgeDepth">—</span>
+        </div>
+        <div class="metric-row">
+          <span>Alignement genoux</span>
+          <span class="metric-badge" id="badgeValgus">—</span>
+        </div>
+        <div class="metric-row">
+          <span>Posture du dos</span>
+          <span class="metric-badge" id="badgeBack">—</span>
+        </div>
+        <div class="metric-row">
+          <span>Symétrie</span>
+          <span class="metric-badge" id="badgeSym">—</span>
+        </div>
+
+        <div class="advice-box">
+          <div class="l">Conseil principal</div>
+          <div class="t" id="adviceText">—</div>
+        </div>
+
+        <button class="btn-results-primary" onclick="resetScan()">Nouveau scan</button>
+        <button class="btn-results-secondary" onclick="switchAppView('profile')">Voir dans mon profil</button>
+      </div>
+
     </div>
   </div>
 
@@ -605,6 +684,11 @@ let bestScore = null;
 let video, canvas, ctx;
 let sessionStartTime = null;
 
+let minRightKneeAngle = Infinity;
+let maxValgusRatio = 0;
+let maxBackAngle = 0;
+let maxKneeDiff = 0;
+
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
     "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.14/wasm"
@@ -656,6 +740,41 @@ function drawSkeleton(landmarks) {
   });
 }
 
+function trackMetrics(lm) {
+  const hipR = lm[24], kneeR = lm[26], ankleR = lm[28];
+  const hipL = lm[23], kneeL = lm[25], ankleL = lm[27];
+  const shoulderR = lm[12], shoulderL = lm[11];
+
+  if (!hipR || !kneeR || !ankleR) return null;
+  const rightKneeAngle = angleBetween(hipR, kneeR, ankleR);
+  minRightKneeAngle = Math.min(minRightKneeAngle, rightKneeAngle);
+
+  const hipWidth = (hipL && hipR) ? Math.abs(hipR.x - hipL.x) : 0;
+  if (hipWidth > 0.01) {
+    const valgusRatio = Math.abs(kneeR.x - ankleR.x) / hipWidth;
+    maxValgusRatio = Math.max(maxValgusRatio, valgusRatio);
+  }
+
+  if (shoulderL && shoulderR && hipL && hipR) {
+    const midShoulder = { x: (shoulderL.x + shoulderR.x) / 2, y: (shoulderL.y + shoulderR.y) / 2 };
+    const midHip = { x: (hipL.x + hipR.x) / 2, y: (hipL.y + hipR.y) / 2 };
+    const dx = midShoulder.x - midHip.x;
+    const dy = midShoulder.y - midHip.y;
+    const mag = Math.sqrt(dx * dx + dy * dy);
+    if (mag > 0.001) {
+      const backAngle = Math.acos(Math.min(1, Math.max(-1, -dy / mag))) * (180 / Math.PI);
+      maxBackAngle = Math.max(maxBackAngle, backAngle);
+    }
+  }
+
+  if (hipL && kneeL && ankleL) {
+    const leftKneeAngle = angleBetween(hipL, kneeL, ankleL);
+    maxKneeDiff = Math.max(maxKneeDiff, Math.abs(rightKneeAngle - leftKneeAngle));
+  }
+
+  return rightKneeAngle;
+}
+
 function detectLoop() {
   if (!scanning) return;
   const now = performance.now();
@@ -663,9 +782,8 @@ function detectLoop() {
   if (result.landmarks && result.landmarks[0]) {
     const lm = result.landmarks[0];
     drawSkeleton(lm);
-    const hip = lm[24], knee = lm[26], ankle = lm[28];
-    if (hip && knee && ankle) {
-      const angle = angleBetween(hip, knee, ankle);
+    const angle = trackMetrics(lm);
+    if (angle !== null) {
       document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
       const score = Math.max(0, Math.min(100, Math.round(100 - Math.abs(angle - 90) * 1.1)));
       if (bestScore === null || score > bestScore) {
@@ -725,6 +843,10 @@ async function startScan() {
   document.getElementById('captureIntro').style.display = 'none';
 
   bestScore = null;
+  minRightKneeAngle = Infinity;
+  maxValgusRatio = 0;
+  maxBackAngle = 0;
+  maxKneeDiff = 0;
   sessionStartTime = Date.now();
   scanning = true;
   btn.disabled = false;
@@ -735,6 +857,83 @@ async function startScan() {
   detectLoop();
 }
 
+function rateMetric(value, goodMax, mediumMax) {
+  if (value <= goodMax) return 'bon';
+  if (value <= mediumMax) return 'moyen';
+  return 'mauvais';
+}
+
+function badgeLabel(rating) {
+  if (rating === 'bon') return 'Bon';
+  if (rating === 'moyen') return 'Moyen';
+  return 'A travailler';
+}
+
+function applyBadge(elId, rating) {
+  const el = document.getElementById(elId);
+  el.textContent = badgeLabel(rating);
+  el.className = 'metric-badge ' + rating;
+}
+
+function buildAdvice(ratings) {
+  if (ratings.valgus === 'mauvais') {
+    return "Tes genoux rentrent vers l'interieur en bas du mouvement. Pousse-les dans l'axe de tes pieds.";
+  }
+  if (ratings.back === 'mauvais') {
+    return "Ton buste s'incline beaucoup vers l'avant. Garde le torse plus droit et engage les abdominaux.";
+  }
+  if (ratings.sym === 'mauvais') {
+    return "Un cote du corps compense l'autre. Ralentis et verifie que tes deux jambes travaillent equitablement.";
+  }
+  if (ratings.depth === 'mauvais') {
+    return "Tu ne descends pas assez bas. Vise a amener tes hanches au niveau de tes genoux.";
+  }
+  if (ratings.valgus === 'moyen' || ratings.back === 'moyen' || ratings.sym === 'moyen' || ratings.depth === 'moyen') {
+    return "Belle execution globale. Continue a affiner ta technique pour progresser encore.";
+  }
+  return "Execution solide sur tous les points suivis. Continue sur cette lancee !";
+}
+
+function showResults() {
+  const depthRating = rateMetric(minRightKneeAngle, 100, 120);
+  const valgusRating = rateMetric(maxValgusRatio, 0.15, 0.35);
+  const backRating = rateMetric(maxBackAngle, 25, 40);
+  const symRating = rateMetric(maxKneeDiff, 8, 15);
+
+  applyBadge('badgeDepth', depthRating);
+  applyBadge('badgeValgus', valgusRating);
+  applyBadge('badgeBack', backRating);
+  applyBadge('badgeSym', symRating);
+
+  const countMauvais = [depthRating, valgusRating, backRating, symRating].filter(function(r) { return r === 'mauvais'; }).length;
+  const risk = countMauvais === 0 ? 'Faible' : (countMauvais === 1 ? 'Modere' : 'Eleve');
+  const riskBanner = document.getElementById('riskBanner');
+  riskBanner.className = 'risk-banner' + (risk === 'Modere' ? ' risk-modere' : risk === 'Eleve' ? ' risk-eleve' : '');
+  document.getElementById('riskLabel').textContent = risk;
+
+  document.getElementById('resultScore').textContent = bestScore !== null ? bestScore : '—';
+  document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
+
+  document.getElementById('scanControls').style.display = 'none';
+  document.getElementById('scanResults').style.display = 'block';
+
+  return {
+    depth_min_angle: Math.round(minRightKneeAngle),
+    valgus_ratio: Math.round(maxValgusRatio * 100) / 100,
+    back_max_angle: Math.round(maxBackAngle),
+    knee_diff_max: Math.round(maxKneeDiff),
+    risk: risk,
+    ratings: { depth: depthRating, valgus: valgusRating, back: backRating, symmetry: symRating }
+  };
+}
+
+window.resetScan = function() {
+  document.getElementById('scanResults').style.display = 'none';
+  document.getElementById('scanControls').style.display = 'block';
+  document.getElementById('captureIntro').style.display = 'block';
+  document.getElementById('scanStatus').textContent = '';
+};
+
 async function stopScan() {
   scanning = false;
   if (animFrameId) cancelAnimationFrame(animFrameId);
@@ -744,14 +943,26 @@ async function stopScan() {
   }
 
   const btn = document.getElementById('scanBtn');
-  const status = document.getElementById('scanStatus');
   btn.textContent = 'Démarrer le scan';
   btn.classList.remove('stop');
 
   const duration = Math.round((Date.now() - sessionStartTime) / 1000);
 
-  if (bestScore !== null && window.currentUserId) {
-    status.textContent = 'Enregistrement de la seance...';
+  video.style.display = 'none';
+  canvas.style.display = 'none';
+  document.getElementById('cameraPlaceholderIcon').style.display = 'block';
+  document.getElementById('liveReadout').style.display = 'none';
+  document.getElementById('recDot').style.display = 'none';
+
+  if (bestScore === null || minRightKneeAngle === Infinity) {
+    document.getElementById('scanStatus').textContent = 'Aucune donnee capturee. Reessaie en te plaçant bien dans le cadre.';
+    document.getElementById('captureIntro').style.display = 'block';
+    return;
+  }
+
+  const metrics = showResults();
+
+  if (window.currentUserId) {
     try {
       await fetch(window.BACKEND_URL + '/api/sessions', {
         method: 'POST',
@@ -760,26 +971,14 @@ async function stopScan() {
           user_id: window.currentUserId,
           movement: 'squat',
           global_score: bestScore,
-          risk_score: null,
+          risk_score: metrics.risk === 'Faible' ? 0 : (metrics.risk === 'Modere' ? 1 : 2),
           reps: 1,
           duration_seconds: duration,
-          metrics: { angle_min: 90 }
+          metrics: metrics
         })
       });
-      status.textContent = 'Seance enregistree — meilleur score ' + bestScore + '%.';
-    } catch (err) {
-      status.textContent = 'Seance terminee (non enregistree).';
-    }
-  } else {
-    status.textContent = 'Scan arrete.';
+    } catch (err) {}
   }
-
-  video.style.display = 'none';
-  canvas.style.display = 'none';
-  document.getElementById('cameraPlaceholderIcon').style.display = 'block';
-  document.getElementById('liveReadout').style.display = 'none';
-  document.getElementById('recDot').style.display = 'none';
-  document.getElementById('captureIntro').style.display = 'block';
 }
 
 window.toggleScan = toggleScan;
