@@ -519,6 +519,11 @@ select.field-underline option{background:var(--panel);color:var(--white)}
         </div>
       </div>
 
+      <div class="advice-box" id="weeklySummaryBox" style="margin:0 0 24px">
+        <div class="l">Cette semaine</div>
+        <div class="t" id="weeklySummaryText">Chargement...</div>
+      </div>
+
       <div class="section-title">Progression</div>
       <div class="chart-frame">
         <canvas id="progressChart"></canvas>
@@ -707,6 +712,37 @@ async function loadProfileView() {
       }
     }
     document.getElementById('statStreak').textContent = streak + (streak === 1 ? ' jour' : ' jours');
+
+    var now = new Date();
+    var sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+    var fourteenDaysAgo = new Date(now.getTime() - 14 * 24 * 60 * 60 * 1000);
+    var thisWeek = sessions.filter(function(s) { return new Date(s.created_at) >= sevenDaysAgo; });
+    var lastWeek = sessions.filter(function(s) {
+      var d = new Date(s.created_at);
+      return d >= fourteenDaysAgo && d < sevenDaysAgo;
+    });
+    var thisWeekScored = thisWeek.filter(function(s) { return typeof s.global_score === 'number'; });
+    var lastWeekScored = lastWeek.filter(function(s) { return typeof s.global_score === 'number'; });
+
+    var summaryText;
+    if (thisWeek.length === 0) {
+      summaryText = 'Aucune séance cette semaine. Lance ton premier scan !';
+    } else {
+      var thisWeekAvg = thisWeekScored.length > 0
+        ? Math.round(thisWeekScored.reduce(function(s, v) { return s + v.global_score; }, 0) / thisWeekScored.length)
+        : null;
+      summaryText = thisWeek.length + (thisWeek.length === 1 ? ' séance' : ' séances');
+      if (thisWeekAvg !== null) {
+        summaryText += ' · score moyen ' + thisWeekAvg + '%';
+        if (lastWeekScored.length > 0) {
+          var lastWeekAvg = Math.round(lastWeekScored.reduce(function(s, v) { return s + v.global_score; }, 0) / lastWeekScored.length);
+          var diff = thisWeekAvg - lastWeekAvg;
+          summaryText += ' (' + (diff >= 0 ? '+' : '') + diff + '% vs semaine dernière)';
+        }
+      }
+    }
+    document.getElementById('weeklySummaryText').textContent = summaryText;
+
     drawProgressChart(sessions);
 
     const listEl = document.getElementById('sessionsList');
