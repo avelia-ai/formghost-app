@@ -42,6 +42,23 @@ nav .links a:hover{color:var(--white)}
   background:var(--volt);color:var(--ink);
   padding:11px 22px;border:none;cursor:pointer;
 }
+.burger-btn{
+  background:transparent;border:1px solid var(--line);color:var(--white);
+  padding:9px 12px;cursor:pointer;display:flex;flex-direction:column;gap:4px;
+}
+.burger-btn span{display:block;width:16px;height:1.5px;background:var(--white)}
+.burger-menu{
+  position:fixed;top:66px;left:6vw;background:var(--panel);
+  border:1px solid var(--line);padding:10px;z-index:60;
+  display:none;flex-direction:column;gap:2px;min-width:160px;
+}
+.burger-menu.open{display:flex}
+.burger-menu a, .burger-menu button{
+  color:var(--white);text-decoration:none;font-family:'IBM Plex Mono';
+  font-size:13px;background:transparent;border:none;text-align:left;
+  cursor:pointer;padding:9px 10px;
+}
+.burger-menu a:hover, .burger-menu button:hover{background:rgba(255,255,255,0.05)}
 @media(max-width:768px){nav .links{display:none}}
 .hero{
   display:grid;grid-template-columns:1fr 1fr;
@@ -155,7 +172,13 @@ footer{
 <body>
 
 <nav>
-  <div class="logo">
+  <div id="navLeftSlot"></div>
+  <div class="links">
+    <a href="#how">Comment ça marche</a>
+    <a href="#features">Fonctionnalités</a>
+    <a href="#social">Communauté</a>
+  </div>
+  <div class="logo" onclick="window.location.href='index.html'" style="cursor:pointer">
     <svg width="18" height="22" viewBox="0 0 22 26" fill="none">
       <circle cx="11" cy="7" r="5" stroke="#F5F5F2" stroke-width="1.8"/>
       <path d="M11 12v8" stroke="#F5F5F2" stroke-width="1.8"/>
@@ -166,13 +189,40 @@ footer{
     </svg>
     FORMGHOST
   </div>
-  <div class="links">
-    <a href="#how">Comment ça marche</a>
-    <a href="#features">Fonctionnalités</a>
-    <a href="#social">Communauté</a>
-  </div>
-  <button class="btn-cta" onclick="window.location.href='app.html'">Rejoindre</button>
 </nav>
+
+<div id="burgerMenu" class="burger-menu">
+  <a href="app.html">Scan</a>
+  <a href="app.html">Profil</a>
+  <button onclick="handleLogout()">Déconnexion</button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
+<script>
+(function() {
+  var SUPABASE_URL = 'https://vbzeklhhdagsoxjxazsl.supabase.co';
+  var SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZiemVrbGhoZGFnc294anhhenNsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExMDQxNDQsImV4cCI6MjA5NjY4MDE0NH0.izZr6ByPmyNfg9YXSrUzaT1goyf7d8mNV_OHjPjFLf0';
+  var client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  window.toggleBurgerMenu = function() {
+    document.getElementById('burgerMenu').classList.toggle('open');
+  };
+
+  window.handleLogout = async function() {
+    await client.auth.signOut();
+    window.location.href = 'index.html';
+  };
+
+  client.auth.getSession().then(function(res) {
+    var slot = document.getElementById('navLeftSlot');
+    if (res.data.session) {
+      slot.innerHTML = '<button class="burger-btn" onclick="toggleBurgerMenu()"><span></span><span></span><span></span></button>';
+    } else {
+      slot.innerHTML = '<button class="btn-cta" onclick="window.location.href=\'app.html\'">Connexion</button>';
+    }
+  });
+})();
+</script>
 
 <section class="hero" style="padding:0">
   <div class="hero-copy">
