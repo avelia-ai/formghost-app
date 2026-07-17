@@ -355,6 +355,10 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <button class="category-tab" data-cat="pilates" onclick="selectCategory('pilates')">Pilates</button>
           <button class="category-tab" data-cat="yoga" onclick="selectCategory('yoga')">Yoga</button>
         </div>
+        <div class="category-tabs" id="movementTabs" style="grid-template-columns:repeat(2,1fr);max-width:280px">
+          <button class="category-tab active" data-ex="squat" onclick="selectExercise('squat')">Squat</button>
+          <button class="category-tab" data-ex="pompes" onclick="selectExercise('pompes')">Pompes</button>
+        </div>
         <div id="captureIntro">
           <h1>Lance ton scan</h1>
           <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
@@ -406,15 +410,15 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <span class="metric-badge" id="badgeDepth">—</span>
         </div>
         <div class="metric-row">
-          <span>Alignement genoux</span>
+          <span id="labelAlign">Alignement genoux</span>
           <span class="metric-badge" id="badgeValgus">—</span>
         </div>
         <div class="metric-row">
-          <span>Posture du dos</span>
+          <span id="labelPosture">Posture du dos</span>
           <span class="metric-badge" id="badgeBack">—</span>
         </div>
         <div class="metric-row">
-          <span>Symétrie</span>
+          <span id="labelSym">Symétrie</span>
           <span class="metric-badge" id="badgeSym">—</span>
         </div>
         <div class="metric-row">
@@ -859,6 +863,31 @@ let repBottomTime = null;
 let repTempos = [];
 let positioned = false;
 let positioningStartTime = null;
+let currentExercise = 'squat';
+
+var EXERCISE_CONFIG = {
+  squat: {
+    down: 120, up: 160,
+    depthGood: 100, depthMed: 120,
+    alignGood: 0.15, alignMed: 0.35, alignLabel: 'Alignement genoux',
+    postureGood: 25, postureMed: 40, postureLabel: 'Posture du dos',
+    symLabel: 'Symetrie'
+  },
+  pompes: {
+    down: 100, up: 150,
+    depthGood: 80, depthMed: 100,
+    alignGood: 0.20, alignMed: 0.40, alignLabel: 'Ecartement des coudes',
+    postureGood: 12, postureMed: 25, postureLabel: 'Alignement du corps',
+    symLabel: 'Symetrie bras'
+  }
+};
+
+window.selectExercise = function(ex) {
+  currentExercise = ex;
+  document.querySelectorAll('#movementTabs .category-tab').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-ex') === ex);
+  });
+};
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -921,6 +950,11 @@ function drawSkeleton(landmarks) {
 }
 
 function trackMetrics(lm) {
+  if (currentExercise === 'pompes') return trackMetricsPompes(lm);
+  return trackMetricsSquat(lm);
+}
+
+function trackMetricsSquat(lm) {
   const hipR = lm[24], kneeR = lm[26], ankleR = lm[28];
   const hipL = lm[23], kneeL = lm[25], ankleL = lm[27];
   const shoulderR = lm[12], shoulderL = lm[11];
@@ -953,6 +987,43 @@ function trackMetrics(lm) {
   }
 
   return rightKneeAngle;
+}
+
+function trackMetricsPompes(lm) {
+  const shR = lm[12], elR = lm[14], wrR = lm[16];
+  const shL = lm[11], elL = lm[13], wrL = lm[15];
+  const hipR = lm[24], ankR = lm[28];
+
+  if (!shR || !elR || !wrR) return null;
+  const rightElbowAngle = angleBetween(shR, elR, wrR);
+  minRightKneeAngle = Math.min(minRightKneeAngle, rightElbowAngle);
+
+  const shoulderWidth = (shL && shR) ? Math.abs(shR.x - shL.x) : 0;
+  if (shoulderWidth > 0.01) {
+    const midX = (shR.x + wrR.x) / 2;
+    const flareRatio = Math.abs(elR.x - midX) / shoulderWidth;
+    maxValgusRatio = Math.max(maxValgusRatio, flareRatio);
+  }
+
+  if (shR && hipR && ankR) {
+    const v1 = { x: shR.x - hipR.x, y: shR.y - hipR.y };
+    const v2 = { x: ankR.x - hipR.x, y: ankR.y - hipR.y };
+    const dot = v1.x * v2.x + v1.y * v2.y;
+    const m1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y);
+    const m2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+    if (m1 > 0 && m2 > 0) {
+      const lineAngle = Math.acos(Math.min(1, Math.max(-1, dot / (m1 * m2)))) * (180 / Math.PI);
+      const sag = Math.abs(180 - lineAngle);
+      maxBackAngle = Math.max(maxBackAngle, sag);
+    }
+  }
+
+  if (shL && elL && wrL) {
+    const leftElbowAngle = angleBetween(shL, elL, wrL);
+    maxKneeDiff = Math.max(maxKneeDiff, Math.abs(rightElbowAngle - leftElbowAngle));
+  }
+
+  return rightElbowAngle;
 }
 
 function captureBestFrame(lm) {
@@ -996,7 +1067,7 @@ function detectLoop() {
       if (minRightKneeAngle < prevMinAngle) {
         captureBestFrame(lm);
       }
-      if (repPhase === 'up' && angle < 120) {
+      if (repPhase === 'up' && angle < EXERCISE_CONFIG[currentExercise].down) {
         repPhase = 'down';
         currentRepMinAngle = angle;
         repDownStartTime = performance.now();
@@ -1006,7 +1077,7 @@ function detectLoop() {
           repBottomTime = performance.now();
         }
         currentRepMinAngle = Math.min(currentRepMinAngle, angle);
-        if (angle > 160) {
+        if (angle > EXERCISE_CONFIG[currentExercise].up) {
           repPhase = 'up';
           repCount++;
           var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(currentRepMinAngle - 90) * 1.1)));
@@ -1234,14 +1305,19 @@ function drawResultsSkeleton(lm, ratings) {
 }
 
 function showResults() {
+  var cfg = EXERCISE_CONFIG[currentExercise];
   var injuries = window.userInjuries || '';
-  var kneeFlagged = injuries.indexOf('genou') !== -1;
-  var backFlagged = injuries.indexOf('dos') !== -1 || injuries.indexOf('lombaire') !== -1;
+  var kneeFlagged = currentExercise === 'squat' && injuries.indexOf('genou') !== -1;
+  var backFlagged = currentExercise === 'squat' && (injuries.indexOf('dos') !== -1 || injuries.indexOf('lombaire') !== -1);
 
-  const depthRating = rateMetric(minRightKneeAngle, 100, 120);
-  const valgusRating = kneeFlagged ? rateMetric(maxValgusRatio, 0.10, 0.25) : rateMetric(maxValgusRatio, 0.15, 0.35);
-  const backRating = backFlagged ? rateMetric(maxBackAngle, 18, 30) : rateMetric(maxBackAngle, 25, 40);
+  const depthRating = rateMetric(minRightKneeAngle, cfg.depthGood, cfg.depthMed);
+  const valgusRating = kneeFlagged ? rateMetric(maxValgusRatio, cfg.alignGood * 0.67, cfg.alignMed * 0.71) : rateMetric(maxValgusRatio, cfg.alignGood, cfg.alignMed);
+  const backRating = backFlagged ? rateMetric(maxBackAngle, cfg.postureGood * 0.72, cfg.postureMed * 0.75) : rateMetric(maxBackAngle, cfg.postureGood, cfg.postureMed);
   const symRating = rateMetric(maxKneeDiff, 8, 15);
+
+  document.getElementById('labelAlign').textContent = cfg.alignLabel;
+  document.getElementById('labelPosture').textContent = cfg.postureLabel;
+  document.getElementById('labelSym').textContent = cfg.symLabel;
 
   var regRating = 'moyen';
   if (repScores.length >= 2) {
@@ -1346,7 +1422,7 @@ async function stopScan() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: window.currentUserId,
-          movement: 'squat',
+          movement: currentExercise,
           global_score: finalScore,
           risk_score: metrics.risk === 'Faible' ? 0 : (metrics.risk === 'Modere' ? 1 : 2),
           reps: repCount || 1,
