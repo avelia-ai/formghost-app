@@ -620,7 +620,16 @@ async function logout() {
 
 async function setCurrentUser() {
   const { data: { user } } = await supabaseClient.auth.getUser();
-  if (user) window.currentUserId = user.id;
+  if (user) {
+    window.currentUserId = user.id;
+    try {
+      const res = await fetch(BACKEND_URL + '/api/profile/' + user.id);
+      const json = await res.json();
+      window.userInjuries = ((json.profile && json.profile.injuries) || '').toLowerCase();
+    } catch (err) {
+      window.userInjuries = '';
+    }
+  }
 }
 
 function showApp() {
@@ -1156,9 +1165,13 @@ function drawResultsSkeleton(lm, ratings) {
 }
 
 function showResults() {
+  var injuries = window.userInjuries || '';
+  var kneeFlagged = injuries.indexOf('genou') !== -1;
+  var backFlagged = injuries.indexOf('dos') !== -1 || injuries.indexOf('lombaire') !== -1;
+
   const depthRating = rateMetric(minRightKneeAngle, 100, 120);
-  const valgusRating = rateMetric(maxValgusRatio, 0.15, 0.35);
-  const backRating = rateMetric(maxBackAngle, 25, 40);
+  const valgusRating = kneeFlagged ? rateMetric(maxValgusRatio, 0.10, 0.25) : rateMetric(maxValgusRatio, 0.15, 0.35);
+  const backRating = backFlagged ? rateMetric(maxBackAngle, 18, 30) : rateMetric(maxBackAngle, 25, 40);
   const symRating = rateMetric(maxKneeDiff, 8, 15);
 
   var regRating = 'moyen';
