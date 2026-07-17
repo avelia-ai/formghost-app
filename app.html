@@ -474,6 +474,34 @@ select.field-underline option{background:var(--panel);color:var(--white)}
         </div>
       </div>
       <div class="scan-status mono" id="progressStatus"></div>
+
+      <button class="btn-scan" id="analyzeBtn" onclick="analyzeProgress()" style="display:none;margin-bottom:24px">Analyser mes progrès</button>
+
+      <div id="analysisResults" style="display:none">
+        <div class="section-title">Analyse IA</div>
+        <div style="font-family:'IBM Plex Mono';font-size:10.5px;color:var(--gray-dim);margin-bottom:20px;line-height:1.5">
+          Estimations visuelles approximatives, pas des mesures cliniques.
+        </div>
+        <div class="profile-stats" style="grid-template-columns:1fr 1fr 1fr;margin-bottom:24px">
+          <div class="profile-stat"><div class="l">Masse grasse</div><div class="v" id="analysisFat" style="font-size:15px">—</div></div>
+          <div class="profile-stat"><div class="l">Masse musc.</div><div class="v" id="analysisMuscle" style="font-size:12px">—</div></div>
+          <div class="profile-stat"><div class="l">Âge physique</div><div class="v" id="analysisAge" style="font-size:15px">—</div></div>
+        </div>
+        <div class="metric-row"><span>Symétrie</span><span class="metric-badge" id="analysisSymmetry">—</span></div>
+        <div class="metric-row"><span>Équilibre</span><span class="metric-badge" id="analysisBalance">—</span></div>
+        <div class="advice-box" style="margin-top:24px">
+          <div class="l">Points forts</div>
+          <div class="t" id="analysisStrengths">—</div>
+        </div>
+        <div class="advice-box">
+          <div class="l">Points à travailler</div>
+          <div class="t" id="analysisWeaknesses">—</div>
+        </div>
+        <div class="advice-box">
+          <div class="l">Résumé</div>
+          <div class="t" id="analysisSummary">—</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -748,7 +776,63 @@ async function loadProgressView() {
         document.getElementById('afterDate').textContent = new Date(after.created_at).toLocaleDateString('fr-FR');
       }
     }
+
+    document.getElementById('analyzeBtn').style.display = (before && after) ? 'block' : 'none';
   } catch (err) {}
+}
+
+function badgeClassFromText(text) {
+  if (!text) return 'moyen';
+  var t = text.toLowerCase();
+  if (t.indexOf('bon') !== -1) return 'bon';
+  if (t.indexOf('travailler') !== -1) return 'mauvais';
+  return 'moyen';
+}
+
+async function analyzeProgress() {
+  var btn = document.getElementById('analyzeBtn');
+  var status = document.getElementById('progressStatus');
+  btn.disabled = true;
+  btn.textContent = 'Analyse en cours...';
+  status.textContent = '';
+
+  try {
+    var res = await fetch(BACKEND_URL + '/api/analyze-progress', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: window.currentUserId })
+    });
+    var json = await res.json();
+    if (json.error) {
+      status.textContent = 'Erreur: ' + json.error;
+      btn.disabled = false;
+      btn.textContent = 'Analyser mes progr\u00e8s';
+      return;
+    }
+    var a = json.analysis || {};
+    document.getElementById('analysisFat').textContent = a.fat_percentage_estimate || '\u2014';
+    document.getElementById('analysisMuscle').textContent = a.muscle_mass_estimate || '\u2014';
+    document.getElementById('analysisAge').textContent = a.physical_age_estimate || '\u2014';
+
+    var symEl = document.getElementById('analysisSymmetry');
+    symEl.textContent = a.symmetry || '\u2014';
+    symEl.className = 'metric-badge ' + badgeClassFromText(a.symmetry);
+
+    var balEl = document.getElementById('analysisBalance');
+    balEl.textContent = a.balance || '\u2014';
+    balEl.className = 'metric-badge ' + badgeClassFromText(a.balance);
+
+    document.getElementById('analysisStrengths').textContent = (a.strengths || []).join(' \u00b7 ') || '\u2014';
+    document.getElementById('analysisWeaknesses').textContent = (a.weaknesses || []).join(' \u00b7 ') || '\u2014';
+    document.getElementById('analysisSummary').textContent = a.summary || '\u2014';
+
+    document.getElementById('analysisResults').style.display = 'block';
+  } catch (err) {
+    status.textContent = 'Erreur lors de l\'analyse.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'Analyser mes progr\u00e8s';
 }
 
 async function loadProfileView() {
