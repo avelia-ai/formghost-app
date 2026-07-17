@@ -421,6 +421,10 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <span>Régularité</span>
           <span class="metric-badge" id="badgeReg">—</span>
         </div>
+        <div class="metric-row">
+          <span>Tempo (descente / montée)</span>
+          <span class="metric-badge" id="badgeTempo" style="color:var(--white);border-color:var(--line)">—</span>
+        </div>
 
         <div class="advice-box">
           <div class="l">Conseil principal</div>
@@ -805,6 +809,9 @@ let repPhase = 'up';
 let repCount = 0;
 let repScores = [];
 let currentRepMinAngle = null;
+let repDownStartTime = null;
+let repBottomTime = null;
+let repTempos = [];
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -916,13 +923,21 @@ function detectLoop() {
       if (repPhase === 'up' && angle < 120) {
         repPhase = 'down';
         currentRepMinAngle = angle;
+        repDownStartTime = performance.now();
+        repBottomTime = performance.now();
       } else if (repPhase === 'down') {
+        if (angle < currentRepMinAngle) {
+          repBottomTime = performance.now();
+        }
         currentRepMinAngle = Math.min(currentRepMinAngle, angle);
         if (angle > 160) {
           repPhase = 'up';
           repCount++;
           var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(currentRepMinAngle - 90) * 1.1)));
           repScores.push(repScore);
+          var downDur = (repBottomTime - repDownStartTime) / 1000;
+          var upDur = (performance.now() - repBottomTime) / 1000;
+          repTempos.push({ down: downDur, up: upDur });
           document.getElementById('readoutReps').textContent = repCount;
         }
       }
@@ -1001,6 +1016,9 @@ async function startScan() {
   repCount = 0;
   repScores = [];
   currentRepMinAngle = null;
+  repDownStartTime = null;
+  repBottomTime = null;
+  repTempos = [];
   sessionStartTime = Date.now();
   document.getElementById('readoutReps').textContent = '0';
   scanning = true;
@@ -1173,6 +1191,15 @@ function showResults() {
   document.getElementById('resultScore').textContent = displayScore !== null ? displayScore : '—';
   document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
 
+  var avgDownTempo = null, avgUpTempo = null;
+  if (repTempos.length > 0) {
+    avgDownTempo = repTempos.reduce(function(s, t) { return s + t.down; }, 0) / repTempos.length;
+    avgUpTempo = repTempos.reduce(function(s, t) { return s + t.up; }, 0) / repTempos.length;
+    document.getElementById('badgeTempo').textContent = avgDownTempo.toFixed(1) + 's / ' + avgUpTempo.toFixed(1) + 's';
+  } else {
+    document.getElementById('badgeTempo').textContent = 'N/A';
+  }
+
   if (bestFrameCanvas && bestFrameLandmarks) {
     drawResultsSkeleton(bestFrameLandmarks, { depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
   }
@@ -1186,6 +1213,8 @@ function showResults() {
     back_max_angle: Math.round(maxBackAngle),
     knee_diff_max: Math.round(maxKneeDiff),
     risk: risk,
+    tempo_down: avgDownTempo !== null ? Math.round(avgDownTempo * 10) / 10 : null,
+    tempo_up: avgUpTempo !== null ? Math.round(avgUpTempo * 10) / 10 : null,
     ratings: { depth: depthRating, valgus: valgusRating, back: backRating, symmetry: symRating }
   };
 }
