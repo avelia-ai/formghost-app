@@ -680,7 +680,10 @@ function showApp() {
   document.getElementById('authPage').classList.add('hidden');
   document.getElementById('appPage').classList.add('active');
   setCurrentUser();
-  switchAppView('capture');
+  var params = new URLSearchParams(window.location.search);
+  var requestedView = params.get('view');
+  var validViews = ['capture', 'progress', 'profile'];
+  switchAppView(validViews.indexOf(requestedView) !== -1 ? requestedView : 'capture');
 }
 
 function switchAppView(view) {
