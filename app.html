@@ -711,7 +711,8 @@ let minRightKneeAngle = Infinity;
 let maxValgusRatio = 0;
 let maxBackAngle = 0;
 let maxKneeDiff = 0;
-let lastLandmarks = null;
+let bestFrameCanvas = null;
+let bestFrameLandmarks = null;
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -799,6 +800,14 @@ function trackMetrics(lm) {
   return rightKneeAngle;
 }
 
+function captureBestFrame(lm) {
+  if (!bestFrameCanvas) bestFrameCanvas = document.createElement('canvas');
+  bestFrameCanvas.width = video.videoWidth;
+  bestFrameCanvas.height = video.videoHeight;
+  bestFrameCanvas.getContext('2d').drawImage(video, 0, 0, bestFrameCanvas.width, bestFrameCanvas.height);
+  bestFrameLandmarks = lm.map(function(p) { return { x: p.x, y: p.y }; });
+}
+
 function detectLoop() {
   if (!scanning) return;
   const now = performance.now();
@@ -806,9 +815,12 @@ function detectLoop() {
   if (result.landmarks && result.landmarks[0]) {
     const lm = result.landmarks[0];
     drawSkeleton(lm);
-    lastLandmarks = lm;
+    const prevMinAngle = minRightKneeAngle;
     const angle = trackMetrics(lm);
     if (angle !== null) {
+      if (minRightKneeAngle < prevMinAngle) {
+        captureBestFrame(lm);
+      }
       document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
       const score = Math.max(0, Math.min(100, Math.round(100 - Math.abs(angle - 90) * 1.1)));
       if (bestScore === null || score > bestScore) {
@@ -872,6 +884,8 @@ async function startScan() {
   maxValgusRatio = 0;
   maxBackAngle = 0;
   maxKneeDiff = 0;
+  bestFrameCanvas = null;
+  bestFrameLandmarks = null;
   sessionStartTime = Date.now();
   scanning = true;
   btn.disabled = false;
@@ -925,55 +939,84 @@ function ratingColor(rating) {
   return '#FF6B5C';
 }
 
+function computeCropBox(lm, vw, vh) {
+  var pts = [];
+  for (var i = 11; i <= 32; i++) { if (lm[i]) pts.push(lm[i]); }
+  if (pts.length === 0) return { x: 0, y: 0, w: vw, h: vh };
+  var xs = pts.map(function(p){ return p.x; });
+  var ys = pts.map(function(p){ return p.y; });
+  var minX = Math.min.apply(null, xs), maxX = Math.max.apply(null, xs);
+  var minY = Math.min.apply(null, ys), maxY = Math.max.apply(null, ys);
+  var padX = (maxX - minX) * 0.3;
+  var padY = (maxY - minY) * 0.15;
+  var x0 = Math.max(0, (minX - padX) * vw);
+  var x1 = Math.min(vw, (maxX + padX) * vw);
+  var y0 = Math.max(0, (minY - padY) * vh);
+  var y1 = Math.min(vh, (maxY + padY) * vh);
+  return { x: x0, y: y0, w: Math.max(1, x1 - x0), h: Math.max(1, y1 - y0) };
+}
+
 function drawResultsSkeleton(lm, ratings) {
-  const rc = document.getElementById('resultsCanvas');
-  rc.width = canvas.width;
-  rc.height = canvas.height;
-  const rctx = rc.getContext('2d');
+  var rc = document.getElementById('resultsCanvas');
+  rc.width = 300;
+  rc.height = 400;
+  var rctx = rc.getContext('2d');
   rctx.clearRect(0, 0, rc.width, rc.height);
+
+  var vw = bestFrameCanvas.width, vh = bestFrameCanvas.height;
+  var crop = computeCropBox(lm, vw, vh);
+
   rctx.save();
   rctx.translate(rc.width, 0);
   rctx.scale(-1, 1);
 
-  const kneeColor = ratingColor(ratings.valgus);
-  const backColor = ratingColor(ratings.back);
-  const neutral = '#ECE7DD';
+  rctx.drawImage(bestFrameCanvas, crop.x, crop.y, crop.w, crop.h, 0, 0, rc.width, rc.height);
+  rctx.fillStyle = 'rgba(14,14,14,0.4)';
+  rctx.fillRect(0, 0, rc.width, rc.height);
 
-  const segs = [
+  function toX(nx) { return ((nx * vw) - crop.x) / crop.w * rc.width; }
+  function toY(ny) { return ((ny * vh) - crop.y) / crop.h * rc.height; }
+
+  var kneeColor = ratingColor(ratings.valgus);
+  var backColor = ratingColor(ratings.back);
+  var neutral = 'rgba(236,231,221,0.9)';
+
+  var segs = [
     [11,12,neutral],[11,13,neutral],[13,15,neutral],[12,14,neutral],[14,16,neutral],
     [11,23,backColor],[12,24,backColor],[23,24,neutral],
     [23,25,kneeColor],[25,27,kneeColor],[24,26,kneeColor],[26,28,kneeColor],
     [27,29,neutral],[29,31,neutral],[28,30,neutral],[30,32,neutral]
   ];
   segs.forEach(function(s) {
-    const p1 = lm[s[0]], p2 = lm[s[1]];
+    var p1 = lm[s[0]], p2 = lm[s[1]];
     if (!p1 || !p2) return;
     rctx.strokeStyle = s[2];
     rctx.lineWidth = 3;
     rctx.beginPath();
-    rctx.moveTo(p1.x * rc.width, p1.y * rc.height);
-    rctx.lineTo(p2.x * rc.width, p2.y * rc.height);
+    rctx.moveTo(toX(p1.x), toY(p1.y));
+    rctx.lineTo(toX(p2.x), toY(p2.y));
     rctx.stroke();
   });
 
   if (ratings.valgus !== 'bon') {
     [25, 26].forEach(function(i) {
-      const p = lm[i];
+      var p = lm[i];
       if (!p) return;
       rctx.beginPath();
-      rctx.arc(p.x * rc.width, p.y * rc.height, 14, 0, 2 * Math.PI);
+      rctx.arc(toX(p.x), toY(p.y), 14, 0, 2 * Math.PI);
       rctx.fillStyle = kneeColor + '33';
       rctx.fill();
     });
   }
 
-  lm.forEach(function(p, i) {
-    if (i > 32) return;
+  for (var i = 11; i <= 32; i++) {
+    var p = lm[i];
+    if (!p) continue;
     rctx.beginPath();
-    rctx.arc(p.x * rc.width, p.y * rc.height, 3, 0, 2 * Math.PI);
+    rctx.arc(toX(p.x), toY(p.y), 3, 0, 2 * Math.PI);
     rctx.fillStyle = neutral;
     rctx.fill();
-  });
+  }
 
   rctx.restore();
 }
@@ -998,8 +1041,8 @@ function showResults() {
   document.getElementById('resultScore').textContent = bestScore !== null ? bestScore : '—';
   document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
 
-  if (lastLandmarks) {
-    drawResultsSkeleton(lastLandmarks, { depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
+  if (bestFrameCanvas && bestFrameLandmarks) {
+    drawResultsSkeleton(bestFrameLandmarks, { depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
   }
 
   document.getElementById('scanControls').style.display = 'none';
