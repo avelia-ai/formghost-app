@@ -105,6 +105,13 @@ body{
 .capture-shell{
   padding:48px 6vw 60px;max-width:600px;margin:0 auto;text-align:center;
 }
+.category-tabs{display:grid;grid-template-columns:repeat(2,1fr);gap:8px;margin-bottom:28px;max-width:340px;margin-left:auto;margin-right:auto}
+.category-tab{
+  padding:12px 10px;border:1px solid var(--line);background:transparent;color:var(--gray);
+  font-family:'IBM Plex Mono';font-size:12px;letter-spacing:0.04em;text-transform:uppercase;
+  cursor:pointer;
+}
+.category-tab.active{background:var(--volt);color:var(--ink);border-color:var(--volt)}
 .capture-shell h1{font-family:'Anton';font-size:clamp(26px,4vw,38px);margin-bottom:12px}
 .capture-shell p{color:var(--gray);font-size:14px;margin-bottom:28px}
 .camera-frame{
@@ -342,6 +349,12 @@ select.field-underline option{background:var(--panel);color:var(--white)}
     <div class="capture-shell">
 
       <div id="scanControls">
+        <div class="category-tabs" id="categoryTabs">
+          <button class="category-tab active" data-cat="musculation" onclick="selectCategory('musculation')">Musculation</button>
+          <button class="category-tab" data-cat="fitness" onclick="selectCategory('fitness')">Fitness</button>
+          <button class="category-tab" data-cat="pilates" onclick="selectCategory('pilates')">Pilates</button>
+          <button class="category-tab" data-cat="yoga" onclick="selectCategory('yoga')">Yoga</button>
+        </div>
         <div id="captureIntro">
           <h1>Lance ton scan</h1>
           <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
@@ -780,6 +793,14 @@ let maxBackAngle = 0;
 let maxKneeDiff = 0;
 let bestFrameCanvas = null;
 let bestFrameLandmarks = null;
+let selectedCategory = 'musculation';
+
+window.selectCategory = function(cat) {
+  selectedCategory = cat;
+  document.querySelectorAll('.category-tab').forEach(function(btn) {
+    btn.classList.toggle('active', btn.getAttribute('data-cat') === cat);
+  });
+};
 let repPhase = 'up';
 let repCount = 0;
 let repScores = [];
@@ -927,6 +948,12 @@ async function toggleScan() {
 async function startScan() {
   const btn = document.getElementById('scanBtn');
   const status = document.getElementById('scanStatus');
+
+  if (selectedCategory !== 'musculation') {
+    status.textContent = 'Ce mode arrive bientot. Selectionne Musculation pour l\'instant.';
+    return;
+  }
+
   btn.disabled = true;
   status.textContent = 'Chargement du modele...';
 
