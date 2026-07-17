@@ -148,6 +148,19 @@ body{
 .results-header .tag-label{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray);text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px}
 .results-score{font-family:'Anton';font-size:52px;color:var(--volt);line-height:1}
 .results-score-label{font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);margin-top:4px}
+.results-visual{
+  aspect-ratio:3/4;max-width:220px;margin:0 auto 24px;
+  background:var(--panel);border:1px solid var(--line);
+  display:flex;align-items:center;justify-content:center;position:relative;
+}
+.results-visual .tag{
+  position:absolute;top:12px;left:12px;font-family:'IBM Plex Mono';
+  font-size:9px;color:var(--gray);letter-spacing:0.04em;
+}
+.results-visual canvas{width:100%;height:100%}
+.results-legend{display:flex;justify-content:center;gap:14px;margin:-14px 0 24px;font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gray)}
+.results-legend span{display:inline-flex;align-items:center;gap:5px}
+.results-legend .dot{width:6px;height:6px;border-radius:50%}
 .risk-banner{
   background:rgba(214,255,61,0.08);border:1px solid rgba(214,255,61,0.3);
   padding:12px 14px;margin-bottom:24px;display:flex;justify-content:space-between;align-items:center;
@@ -351,6 +364,16 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <div class="tag-label">Squat terminé</div>
           <div class="results-score" id="resultScore">—</div>
           <div class="results-score-label">score global</div>
+        </div>
+
+        <div class="results-visual">
+          <div class="tag">SILHOUETTE ANALYSEE</div>
+          <canvas id="resultsCanvas"></canvas>
+        </div>
+        <div class="results-legend">
+          <span><span class="dot" style="background:#D6FF3D"></span>Bon</span>
+          <span><span class="dot" style="background:#FF8A00"></span>Moyen</span>
+          <span><span class="dot" style="background:#FF6B5C"></span>A travailler</span>
         </div>
 
         <div class="risk-banner" id="riskBanner">
@@ -688,6 +711,7 @@ let minRightKneeAngle = Infinity;
 let maxValgusRatio = 0;
 let maxBackAngle = 0;
 let maxKneeDiff = 0;
+let lastLandmarks = null;
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -782,6 +806,7 @@ function detectLoop() {
   if (result.landmarks && result.landmarks[0]) {
     const lm = result.landmarks[0];
     drawSkeleton(lm);
+    lastLandmarks = lm;
     const angle = trackMetrics(lm);
     if (angle !== null) {
       document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
@@ -894,6 +919,65 @@ function buildAdvice(ratings) {
   return "Execution solide sur tous les points suivis. Continue sur cette lancee !";
 }
 
+function ratingColor(rating) {
+  if (rating === 'bon') return '#D6FF3D';
+  if (rating === 'moyen') return '#FF8A00';
+  return '#FF6B5C';
+}
+
+function drawResultsSkeleton(lm, ratings) {
+  const rc = document.getElementById('resultsCanvas');
+  rc.width = canvas.width;
+  rc.height = canvas.height;
+  const rctx = rc.getContext('2d');
+  rctx.clearRect(0, 0, rc.width, rc.height);
+  rctx.save();
+  rctx.translate(rc.width, 0);
+  rctx.scale(-1, 1);
+
+  const kneeColor = ratingColor(ratings.valgus);
+  const backColor = ratingColor(ratings.back);
+  const neutral = '#ECE7DD';
+
+  const segs = [
+    [11,12,neutral],[11,13,neutral],[13,15,neutral],[12,14,neutral],[14,16,neutral],
+    [11,23,backColor],[12,24,backColor],[23,24,neutral],
+    [23,25,kneeColor],[25,27,kneeColor],[24,26,kneeColor],[26,28,kneeColor],
+    [27,29,neutral],[29,31,neutral],[28,30,neutral],[30,32,neutral]
+  ];
+  segs.forEach(function(s) {
+    const p1 = lm[s[0]], p2 = lm[s[1]];
+    if (!p1 || !p2) return;
+    rctx.strokeStyle = s[2];
+    rctx.lineWidth = 3;
+    rctx.beginPath();
+    rctx.moveTo(p1.x * rc.width, p1.y * rc.height);
+    rctx.lineTo(p2.x * rc.width, p2.y * rc.height);
+    rctx.stroke();
+  });
+
+  if (ratings.valgus !== 'bon') {
+    [25, 26].forEach(function(i) {
+      const p = lm[i];
+      if (!p) return;
+      rctx.beginPath();
+      rctx.arc(p.x * rc.width, p.y * rc.height, 14, 0, 2 * Math.PI);
+      rctx.fillStyle = kneeColor + '33';
+      rctx.fill();
+    });
+  }
+
+  lm.forEach(function(p, i) {
+    if (i > 32) return;
+    rctx.beginPath();
+    rctx.arc(p.x * rc.width, p.y * rc.height, 3, 0, 2 * Math.PI);
+    rctx.fillStyle = neutral;
+    rctx.fill();
+  });
+
+  rctx.restore();
+}
+
 function showResults() {
   const depthRating = rateMetric(minRightKneeAngle, 100, 120);
   const valgusRating = rateMetric(maxValgusRatio, 0.15, 0.35);
@@ -913,6 +997,10 @@ function showResults() {
 
   document.getElementById('resultScore').textContent = bestScore !== null ? bestScore : '—';
   document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
+
+  if (lastLandmarks) {
+    drawResultsSkeleton(lastLandmarks, { depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
+  }
 
   document.getElementById('scanControls').style.display = 'none';
   document.getElementById('scanResults').style.display = 'block';
