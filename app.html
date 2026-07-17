@@ -256,6 +256,11 @@ select.field-underline option{background:var(--panel);color:var(--white)}
   display:grid;grid-template-columns:repeat(2,1fr);gap:1px;
   background:var(--line);border:1px solid var(--line);margin-bottom:36px;
 }
+.chart-frame{
+  background:var(--panel);border:1px solid var(--line);
+  padding:16px;margin-bottom:36px;height:140px;
+}
+.chart-frame canvas{width:100%;height:100%}
 .profile-stat{background:var(--panel);padding:20px 18px}
 .profile-stat .l{font-family:'IBM Plex Mono';font-size:10.5px;color:var(--gray);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:8px}
 .profile-stat .v{font-family:'Anton';font-size:28px;color:var(--white)}
@@ -352,6 +357,7 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           </svg>
           <div class="live-readout" id="liveReadout" style="display:none">
             <div class="readout-row"><span>Angle genou</span><span id="readoutAngle" class="ok">—</span></div>
+            <div class="readout-row"><span>Répétitions</span><span id="readoutReps" class="ok">0</span></div>
             <div class="readout-row"><span>Meilleur score</span><span id="readoutBest" class="hl">—</span></div>
           </div>
         </div>
@@ -397,6 +403,10 @@ select.field-underline option{background:var(--panel);color:var(--white)}
         <div class="metric-row">
           <span>Symétrie</span>
           <span class="metric-badge" id="badgeSym">—</span>
+        </div>
+        <div class="metric-row">
+          <span>Régularité</span>
+          <span class="metric-badge" id="badgeReg">—</span>
         </div>
 
         <div class="advice-box">
@@ -483,6 +493,18 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <div class="l">Score moyen</div>
           <div class="v" id="statAvg">—</div>
         </div>
+      </div>
+
+      <div class="profile-stats" style="grid-template-columns:1fr;margin-bottom:16px">
+        <div class="profile-stat">
+          <div class="l">Série en cours</div>
+          <div class="v hl" id="statStreak">0 jour</div>
+        </div>
+      </div>
+
+      <div class="section-title">Progression</div>
+      <div class="chart-frame">
+        <canvas id="progressChart"></canvas>
       </div>
 
       <div class="section-title">Dernières séances</div>
@@ -641,6 +663,26 @@ async function loadProfileView() {
       document.getElementById('statAvg').textContent = '—';
     }
 
+    var uniqueDays = {};
+    sessions.forEach(function(s) {
+      var d = new Date(s.created_at);
+      var key = d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+      uniqueDays[key] = true;
+    });
+    var streak = 0;
+    var cursor = new Date();
+    while (true) {
+      var key2 = cursor.getFullYear() + '-' + cursor.getMonth() + '-' + cursor.getDate();
+      if (uniqueDays[key2]) {
+        streak++;
+        cursor.setDate(cursor.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+    document.getElementById('statStreak').textContent = streak + (streak === 1 ? ' jour' : ' jours');
+    drawProgressChart(sessions);
+
     const listEl = document.getElementById('sessionsList');
     if (sessions.length === 0) {
       listEl.innerHTML = '<div class="empty-state">Aucune séance enregistrée pour l\'instant. Ton premier scan apparaîtra ici.</div>';
@@ -689,6 +731,31 @@ async function saveProfile() {
   btn.textContent = 'Enregistrer les modifications';
 }
 
+function drawProgressChart(sessions) {
+  var canvas = document.getElementById('progressChart');
+  var scored = sessions.filter(function(s) { return typeof s.global_score === 'number'; }).slice(0, 10).reverse();
+  var rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width || 300;
+  canvas.height = rect.height || 108;
+  var ctx = canvas.getContext('2d');
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  if (scored.length === 0) {
+    ctx.fillStyle = '#6E6E68';
+    ctx.font = '11px IBM Plex Mono, monospace';
+    ctx.fillText('Pas encore de donnees', 10, canvas.height / 2);
+    return;
+  }
+  var padding = 10;
+  var barW = (canvas.width - padding * 2) / scored.length;
+  scored.forEach(function(s, i) {
+    var h = (s.global_score / 100) * (canvas.height - padding * 2);
+    var x = padding + i * barW;
+    var y = canvas.height - padding - h;
+    ctx.fillStyle = '#D6FF3D';
+    ctx.fillRect(x + barW * 0.15, y, barW * 0.7, h);
+  });
+}
+
 async function checkSession() {
   const { data } = await supabaseClient.auth.getSession();
   if (data.session) showApp();
@@ -713,6 +780,10 @@ let maxBackAngle = 0;
 let maxKneeDiff = 0;
 let bestFrameCanvas = null;
 let bestFrameLandmarks = null;
+let repPhase = 'up';
+let repCount = 0;
+let repScores = [];
+let currentRepMinAngle = null;
 
 async function initPoseLandmarker() {
   const vision = await FilesetResolver.forVisionTasks(
@@ -821,6 +892,19 @@ function detectLoop() {
       if (minRightKneeAngle < prevMinAngle) {
         captureBestFrame(lm);
       }
+      if (repPhase === 'up' && angle < 120) {
+        repPhase = 'down';
+        currentRepMinAngle = angle;
+      } else if (repPhase === 'down') {
+        currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+        if (angle > 160) {
+          repPhase = 'up';
+          repCount++;
+          var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(currentRepMinAngle - 90) * 1.1)));
+          repScores.push(repScore);
+          document.getElementById('readoutReps').textContent = repCount;
+        }
+      }
       document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
       const score = Math.max(0, Math.min(100, Math.round(100 - Math.abs(angle - 90) * 1.1)));
       if (bestScore === null || score > bestScore) {
@@ -886,7 +970,12 @@ async function startScan() {
   maxKneeDiff = 0;
   bestFrameCanvas = null;
   bestFrameLandmarks = null;
+  repPhase = 'up';
+  repCount = 0;
+  repScores = [];
+  currentRepMinAngle = null;
   sessionStartTime = Date.now();
+  document.getElementById('readoutReps').textContent = '0';
   scanning = true;
   btn.disabled = false;
   btn.textContent = 'Terminer le scan';
@@ -1027,10 +1116,23 @@ function showResults() {
   const backRating = rateMetric(maxBackAngle, 25, 40);
   const symRating = rateMetric(maxKneeDiff, 8, 15);
 
+  var regRating = 'moyen';
+  if (repScores.length >= 2) {
+    var regSpread = Math.max.apply(null, repScores) - Math.min.apply(null, repScores);
+    regRating = rateMetric(regSpread, 10, 20);
+  }
+
   applyBadge('badgeDepth', depthRating);
   applyBadge('badgeValgus', valgusRating);
   applyBadge('badgeBack', backRating);
   applyBadge('badgeSym', symRating);
+  var regBadgeEl = document.getElementById('badgeReg');
+  if (repScores.length >= 2) {
+    applyBadge('badgeReg', regRating);
+  } else {
+    regBadgeEl.textContent = 'N/A';
+    regBadgeEl.className = 'metric-badge moyen';
+  }
 
   const countMauvais = [depthRating, valgusRating, backRating, symRating].filter(function(r) { return r === 'mauvais'; }).length;
   const risk = countMauvais === 0 ? 'Faible' : (countMauvais === 1 ? 'Modere' : 'Eleve');
@@ -1038,7 +1140,10 @@ function showResults() {
   riskBanner.className = 'risk-banner' + (risk === 'Modere' ? ' risk-modere' : risk === 'Eleve' ? ' risk-eleve' : '');
   document.getElementById('riskLabel').textContent = risk;
 
-  document.getElementById('resultScore').textContent = bestScore !== null ? bestScore : '—';
+  var displayScore = repScores.length > 0
+    ? Math.round(repScores.reduce(function(s, v) { return s + v; }, 0) / repScores.length)
+    : bestScore;
+  document.getElementById('resultScore').textContent = displayScore !== null ? displayScore : '—';
   document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
 
   if (bestFrameCanvas && bestFrameLandmarks) {
@@ -1095,15 +1200,18 @@ async function stopScan() {
 
   if (window.currentUserId) {
     try {
+      var finalScore = repScores.length > 0
+        ? Math.round(repScores.reduce(function(s, v) { return s + v; }, 0) / repScores.length)
+        : bestScore;
       await fetch(window.BACKEND_URL + '/api/sessions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           user_id: window.currentUserId,
           movement: 'squat',
-          global_score: bestScore,
+          global_score: finalScore,
           risk_score: metrics.risk === 'Faible' ? 0 : (metrics.risk === 'Modere' ? 1 : 2),
-          reps: 1,
+          reps: repCount || 1,
           duration_seconds: duration,
           metrics: metrics
         })
