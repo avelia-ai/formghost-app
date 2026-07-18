@@ -298,11 +298,14 @@ select.field-underline option{background:var(--panel);color:var(--white)}
 
 .program-day{border:1px solid var(--line);padding:16px;margin-bottom:14px}
 .program-day-title{font-family:'Anton';font-size:15px;color:var(--volt);margin-bottom:10px}
-.program-exercise{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
+.program-exercise{display:flex;justify-content:space-between;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--line);font-size:13px;gap:14px}
 .program-exercise:last-child{border-bottom:none}
-.program-exercise-name{font-weight:600}
-.program-exercise-notes{color:var(--gray);font-size:11.5px;margin-top:2px}
-.program-exercise-sets{font-family:'IBM Plex Mono';color:var(--volt);font-size:12px;white-space:nowrap}
+.program-exercise-cat{font-family:'IBM Plex Mono';font-size:8.5px;color:var(--volt);text-transform:uppercase;letter-spacing:0.08em;border:1px solid var(--volt);display:inline-block;padding:2px 7px;margin-bottom:7px}
+.program-exercise-name{font-weight:600;font-size:14px}
+.program-exercise-notes{color:var(--gray);font-size:11.5px;margin-top:3px;line-height:1.4}
+.program-exercise-stats{text-align:right;flex-shrink:0}
+.program-exercise-sets{font-family:'Anton';color:var(--white);font-size:15px;white-space:nowrap}
+.program-exercise-rest{font-family:'IBM Plex Mono';font-size:9.5px;color:var(--gray);margin-top:4px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -769,23 +772,19 @@ function renderProgram(p) {
   document.getElementById('programMeta').textContent = (p.duration_weeks || '—') + ' semaines \u00b7 ' + (p.sessions_per_week || '—') + ' s\u00e9ances/semaine';
   document.getElementById('programAdvice').textContent = p.general_advice || '—';
 
-  var categoryIcons = {
-    poitrine: '\uD83D\uDCAA',
-    dos: '\uD83C\uDFCB\uFE0F',
-    jambes: '\uD83E\uDDB5',
-    epaules: '\uD83E\uDD38',
-    bras: '\uD83E\uDDBE',
-    abdos: '\uD83D\uDD25',
-    cardio: '\uD83C\uDFC3'
-  };
-
   var scheduleEl = document.getElementById('programSchedule');
   var days = p.weekly_schedule || [];
   scheduleEl.innerHTML = days.map(function(day) {
     var exercises = (day.exercises || []).map(function(ex) {
-      var icon = categoryIcons[ex.category] || '\uD83D\uDCAA';
-      var restText = ex.rest_seconds ? (ex.rest_seconds + 's repos') : '';
-      return '<div class="program-exercise"><div style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:18px;flex-shrink:0">' + icon + '</span><div><div class="program-exercise-name">' + ex.name + '</div><div class="program-exercise-notes">' + (ex.notes || '') + (restText ? ' \u00b7 ' + restText : '') + '</div></div></div><div class="program-exercise-sets">' + ex.sets + 'x' + ex.reps + '</div></div>';
+      var restText = ex.rest_seconds ? ('Repos ' + ex.rest_seconds + 's') : '';
+      var catLabel = ex.category ? ex.category.toString().toUpperCase() : '';
+      return '<div class="program-exercise"><div>' +
+        (catLabel ? '<div class="program-exercise-cat">' + catLabel + '</div>' : '') +
+        '<div class="program-exercise-name">' + ex.name + '</div>' +
+        '<div class="program-exercise-notes">' + (ex.notes || '') + '</div>' +
+        '</div><div class="program-exercise-stats"><div class="program-exercise-sets">' + ex.sets + ' \u00d7 ' + ex.reps + '</div>' +
+        (restText ? '<div class="program-exercise-rest">' + restText + '</div>' : '') +
+        '</div></div>';
     }).join('');
     return '<div class="program-day"><div class="program-day-title">' + day.day + ' \u2014 ' + day.focus + '</div>' + exercises + '</div>';
   }).join('');
