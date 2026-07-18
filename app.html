@@ -295,6 +295,14 @@ select.field-underline option{background:var(--panel);color:var(--white)}
 .progress-photo-frame img{width:100%;height:100%;object-fit:cover;position:absolute;inset:0}
 .progress-upload-btn{font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);border:1px dashed var(--line);padding:10px 14px;cursor:pointer;text-align:center;z-index:2;position:relative}
 .progress-photo-date{font-family:'IBM Plex Mono';font-size:10px;color:var(--gray-dim);text-align:center;margin-top:6px}
+
+.program-day{border:1px solid var(--line);padding:16px;margin-bottom:14px}
+.program-day-title{font-family:'Anton';font-size:15px;color:var(--volt);margin-bottom:10px}
+.program-exercise{display:flex;justify-content:space-between;align-items:flex-start;padding:8px 0;border-bottom:1px solid var(--line);font-size:13px;gap:10px}
+.program-exercise:last-child{border-bottom:none}
+.program-exercise-name{font-weight:600}
+.program-exercise-notes{color:var(--gray);font-size:11.5px;margin-top:2px}
+.program-exercise-sets{font-family:'IBM Plex Mono';color:var(--volt);font-size:12px;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -345,9 +353,10 @@ select.field-underline option{background:var(--panel);color:var(--white)}
 <div id="appPage">
   <div class="app-nav">
     <div class="app-logo" onclick="window.location.href='index.html'" style="cursor:pointer">FORMGHOST</div>
-    <div class="app-tabs">
+    <div class="app-tabs" style="overflow-x:auto">
       <button class="app-tab active" id="navCapture" onclick="switchAppView('capture')">Scan</button>
       <button class="app-tab" id="navProgress" onclick="switchAppView('progress')">Progrès</button>
+      <button class="app-tab" id="navProgram" onclick="switchAppView('program')">Programme</button>
       <button class="app-tab" id="navProfile" onclick="switchAppView('profile')">Profil</button>
     </div>
     <button class="btn-logout" onclick="logout()">Déconnexion</button>
@@ -501,6 +510,31 @@ select.field-underline option{background:var(--panel);color:var(--white)}
         <div class="advice-box">
           <div class="l">Résumé</div>
           <div class="t" id="analysisSummary">—</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="programView" class="app-view">
+    <div class="profile-shell">
+      <div class="section-title">Programme personnalisé</div>
+      <div class="field-row">
+        <div class="field-label">Décris ce que tu veux atteindre</div>
+        <textarea class="field-textarea" id="goalDescription" placeholder="Ex: je veux prendre du muscle sur le haut du corps, 3 séances par semaine, je suis débutant"></textarea>
+      </div>
+      <button class="btn-scan" id="generateProgramBtn" onclick="generateProgram()" style="margin-bottom:20px">Générer mon programme</button>
+      <div class="scan-status mono" id="programStatus"></div>
+
+      <div id="programResult" style="display:none">
+        <div class="results-header" style="text-align:left;margin-bottom:20px">
+          <div class="tag-label" style="margin-bottom:6px">Ton programme</div>
+          <div style="font-family:'Anton';font-size:24px;color:var(--white)" id="programName">—</div>
+          <div style="font-family:'IBM Plex Mono';font-size:11px;color:var(--gray);margin-top:6px" id="programMeta">—</div>
+        </div>
+        <div id="programSchedule"></div>
+        <div class="advice-box">
+          <div class="l">Conseils généraux</div>
+          <div class="t" id="programAdvice">—</div>
         </div>
       </div>
     </div>
@@ -718,12 +752,75 @@ function showApp() {
 function switchAppView(view) {
   document.getElementById('navCapture').classList.toggle('active', view === 'capture');
   document.getElementById('navProgress').classList.toggle('active', view === 'progress');
+  document.getElementById('navProgram').classList.toggle('active', view === 'program');
   document.getElementById('navProfile').classList.toggle('active', view === 'profile');
   document.getElementById('captureView').classList.toggle('active', view === 'capture');
   document.getElementById('progressView').classList.toggle('active', view === 'progress');
+  document.getElementById('programView').classList.toggle('active', view === 'program');
   document.getElementById('profileView').classList.toggle('active', view === 'profile');
   if (view === 'profile') loadProfileView();
   if (view === 'progress') loadProgressView();
+  if (view === 'program') loadProgramView();
+}
+
+function renderProgram(p) {
+  if (!p) return;
+  document.getElementById('programName').textContent = p.program_name || 'Programme';
+  document.getElementById('programMeta').textContent = (p.duration_weeks || '—') + ' semaines \u00b7 ' + (p.sessions_per_week || '—') + ' s\u00e9ances/semaine';
+  document.getElementById('programAdvice').textContent = p.general_advice || '—';
+
+  var scheduleEl = document.getElementById('programSchedule');
+  var days = p.weekly_schedule || [];
+  scheduleEl.innerHTML = days.map(function(day) {
+    var exercises = (day.exercises || []).map(function(ex) {
+      return '<div class="program-exercise"><div><div class="program-exercise-name">' + ex.name + '</div><div class="program-exercise-notes">' + (ex.notes || '') + '</div></div><div class="program-exercise-sets">' + ex.sets + 'x' + ex.reps + '</div></div>';
+    }).join('');
+    return '<div class="program-day"><div class="program-day-title">' + day.day + ' \u2014 ' + day.focus + '</div>' + exercises + '</div>';
+  }).join('');
+
+  document.getElementById('programResult').style.display = 'block';
+}
+
+async function generateProgram() {
+  var goal = document.getElementById('goalDescription').value.trim();
+  var btn = document.getElementById('generateProgramBtn');
+  var status = document.getElementById('programStatus');
+  if (!goal) { status.textContent = 'D\u00e9cris ton objectif avant de g\u00e9n\u00e9rer.'; return; }
+  btn.disabled = true;
+  btn.textContent = 'G\u00e9n\u00e9ration en cours...';
+  status.textContent = '';
+
+  try {
+    var res = await fetch(BACKEND_URL + '/api/generate-program', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: window.currentUserId, goal_description: goal })
+    });
+    var json = await res.json();
+    if (json.error) {
+      status.textContent = 'Erreur: ' + json.error;
+    } else {
+      renderProgram(json.program.program_json);
+    }
+  } catch (err) {
+    status.textContent = 'Erreur lors de la g\u00e9n\u00e9ration.';
+  }
+
+  btn.disabled = false;
+  btn.textContent = 'G\u00e9n\u00e9rer mon programme';
+}
+
+async function loadProgramView() {
+  if (!window.currentUserId) return;
+  try {
+    var res = await fetch(BACKEND_URL + '/api/programs/' + window.currentUserId);
+    var json = await res.json();
+    var programs = json.programs || [];
+    if (programs.length > 0) {
+      renderProgram(programs[0].program_json);
+      document.getElementById('goalDescription').value = programs[0].goal_description || '';
+    }
+  } catch (err) {}
 }
 
 async function uploadProgressPhoto(type, inputEl) {
