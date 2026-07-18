@@ -769,11 +769,23 @@ function renderProgram(p) {
   document.getElementById('programMeta').textContent = (p.duration_weeks || '—') + ' semaines \u00b7 ' + (p.sessions_per_week || '—') + ' s\u00e9ances/semaine';
   document.getElementById('programAdvice').textContent = p.general_advice || '—';
 
+  var categoryIcons = {
+    poitrine: '\uD83D\uDCAA',
+    dos: '\uD83C\uDFCB\uFE0F',
+    jambes: '\uD83E\uDDB5',
+    epaules: '\uD83E\uDD38',
+    bras: '\uD83E\uDDBE',
+    abdos: '\uD83D\uDD25',
+    cardio: '\uD83C\uDFC3'
+  };
+
   var scheduleEl = document.getElementById('programSchedule');
   var days = p.weekly_schedule || [];
   scheduleEl.innerHTML = days.map(function(day) {
     var exercises = (day.exercises || []).map(function(ex) {
-      return '<div class="program-exercise"><div><div class="program-exercise-name">' + ex.name + '</div><div class="program-exercise-notes">' + (ex.notes || '') + '</div></div><div class="program-exercise-sets">' + ex.sets + 'x' + ex.reps + '</div></div>';
+      var icon = categoryIcons[ex.category] || '\uD83D\uDCAA';
+      var restText = ex.rest_seconds ? (ex.rest_seconds + 's repos') : '';
+      return '<div class="program-exercise"><div style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:18px;flex-shrink:0">' + icon + '</span><div><div class="program-exercise-name">' + ex.name + '</div><div class="program-exercise-notes">' + (ex.notes || '') + (restText ? ' \u00b7 ' + restText : '') + '</div></div></div><div class="program-exercise-sets">' + ex.sets + 'x' + ex.reps + '</div></div>';
     }).join('');
     return '<div class="program-day"><div class="program-day-title">' + day.day + ' \u2014 ' + day.focus + '</div>' + exercises + '</div>';
   }).join('');
