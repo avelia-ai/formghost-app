@@ -783,6 +783,25 @@ window.toggleExerciseDetail = function(id) {
   el.style.display = el.style.display === 'flex' ? 'none' : 'flex';
 };
 
+function normalizeCategory(raw) {
+  var k = (raw || '').toString().toLowerCase().trim();
+  var known = ['poussee_horizontale','poussee_verticale','tirage_horizontal','tirage_vertical','squat','hip_hinge','fente','flexion_coude','elevation_laterale','flexion_abdo','gainage','cardio'];
+  if (known.indexOf(k) !== -1) return k;
+  if (k.indexOf('pouss') !== -1 && k.indexOf('vertical') !== -1) return 'poussee_verticale';
+  if (k.indexOf('pouss') !== -1) return 'poussee_horizontale';
+  if (k.indexOf('tirage') !== -1 && k.indexOf('vertical') !== -1) return 'tirage_vertical';
+  if (k.indexOf('tirage') !== -1 || k.indexOf('row') !== -1 || k.indexOf('rowing') !== -1) return 'tirage_horizontal';
+  if (k.indexOf('squat') !== -1 || k.indexOf('presse') !== -1 || k.indexOf('quadri') !== -1 || k.indexOf('cuisse') !== -1 || k.indexOf('jambe') !== -1) return 'squat';
+  if (k.indexOf('hinge') !== -1 || k.indexOf('souleve') !== -1 || k.indexOf('deadlift') !== -1 || k.indexOf('ischio') !== -1 || k.indexOf('lombaire') !== -1) return 'hip_hinge';
+  if (k.indexOf('fente') !== -1 || k.indexOf('lunge') !== -1) return 'fente';
+  if (k.indexOf('coude') !== -1 || k.indexOf('curl') !== -1 || k.indexOf('biceps') !== -1 || k.indexOf('triceps') !== -1 || k.indexOf('bras') !== -1) return 'flexion_coude';
+  if (k.indexOf('lateral') !== -1 || k.indexOf('epaule') !== -1 || k.indexOf('deltoide') !== -1) return 'elevation_laterale';
+  if (k.indexOf('abdo') !== -1 || k.indexOf('crunch') !== -1) return 'flexion_abdo';
+  if (k.indexOf('gainage') !== -1 || k.indexOf('planche') !== -1 || k.indexOf('plank') !== -1) return 'gainage';
+  if (k.indexOf('cardio') !== -1 || k.indexOf('course') !== -1 || k.indexOf('saut') !== -1) return 'cardio';
+  return 'poussee_horizontale';
+}
+
 function renderProgram(p) {
   if (!p) return;
   document.getElementById('programName').textContent = p.program_name || 'Programme';
@@ -846,8 +865,8 @@ function renderProgram(p) {
   scheduleEl.innerHTML = days.map(function(day, dayIdx) {
     var exercises = (day.exercises || []).map(function(ex, exIdx) {
       var restText = ex.rest_seconds ? ('Repos ' + ex.rest_seconds + 's') : '';
-      var catKey = ex.category ? ex.category.toString().toLowerCase().trim() : '';
-      var catLabel = catKey ? catKey.replace(/_/g, ' ').toUpperCase() : '';
+      var catKey = normalizeCategory(ex.category);
+      var catLabel = ex.category ? ex.category.toString().replace(/_/g, ' ').toUpperCase() : catKey.replace(/_/g, ' ').toUpperCase();
       var pair = illustrationPairs[catKey] || illustrationPairs.poussee_horizontale;
       var exId = 'exDetail' + dayIdx + '_' + exIdx;
       var tips = (ex.execution_tips || []).map(function(t) { return '<li>' + t + '</li>'; }).join('');
