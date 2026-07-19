@@ -383,10 +383,6 @@ select.field-underline option{background:var(--panel);color:var(--white)}
           <button class="category-tab" data-cat="pilates" onclick="selectCategory('pilates')">Pilates</button>
           <button class="category-tab" data-cat="yoga" onclick="selectCategory('yoga')">Yoga</button>
         </div>
-        <div class="category-tabs" id="movementTabs" style="grid-template-columns:repeat(2,1fr);max-width:280px">
-          <button class="category-tab active" data-ex="squat" onclick="selectExercise('squat')">Squat</button>
-          <button class="category-tab" data-ex="pompes" onclick="selectExercise('pompes')">Pompes</button>
-        </div>
         <div id="captureIntro">
           <h1>Lance ton scan</h1>
           <p>Positionne ton téléphone pour voir ton corps entier, puis démarre. FormGhost suit ta profondeur de squat en direct.</p>
@@ -1344,6 +1340,16 @@ function drawComposite(lm) {
   compositeCtx.fillText('FORMGHOST', 24, ch - 34);
 }
 
+function detectExerciseType(lm) {
+  var shL = lm[11], shR = lm[12], hipL = lm[23], hipR = lm[24];
+  if (!shL || !shR || !hipL || !hipR) return null;
+  var shMidX = (shL.x + shR.x) / 2, shMidY = (shL.y + shR.y) / 2;
+  var hipMidX = (hipL.x + hipR.x) / 2, hipMidY = (hipL.y + hipR.y) / 2;
+  var dx = hipMidX - shMidX, dy = hipMidY - shMidY;
+  var angleFromVertical = Math.atan2(Math.abs(dx), Math.abs(dy)) * (180 / Math.PI);
+  return angleFromVertical > 50 ? 'pompes' : 'squat';
+}
+
 function isFullyVisible(lm) {
   var idxs = [11, 12, 23, 24, 25, 26, 27, 28];
   for (var i = 0; i < idxs.length; i++) {
@@ -1486,9 +1492,14 @@ function detectLoop() {
 
     if (!positioned) {
       if (isFullyVisible(lm)) {
-        if (!positioningStartTime) positioningStartTime = performance.now();
+        if (!positioningStartTime) {
+          positioningStartTime = performance.now();
+          var detected = detectExerciseType(lm);
+          if (detected) currentExercise = detected;
+        }
         var elapsed = (performance.now() - positioningStartTime) / 1000;
-        document.getElementById('scanStatus').textContent = 'Bien positionne, maintiens la pose...';
+        var exLabel = currentExercise === 'pompes' ? 'Pompes' : 'Squat';
+        document.getElementById('scanStatus').textContent = 'Exercice detecte : ' + exLabel + ' \u2014 maintiens la pose...';
         if (elapsed >= 1.2) {
           positioned = true;
           document.getElementById('scanStatus').textContent = 'Scan en cours...';
