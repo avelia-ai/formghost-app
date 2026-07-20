@@ -402,6 +402,7 @@ select.field-underline option{background:var(--panel);color:var(--white)}
             <div class="readout-row"><span>Meilleur score</span><span id="readoutBest" class="hl">—</span></div>
           </div>
         </div>
+        <button class="btn-results-secondary" id="voiceToggleBtn" onclick="toggleVoice()" style="margin-bottom:14px;max-width:340px;margin-left:auto;margin-right:auto">Coach vocal : Actif</button>
         <div class="scan-status mono" id="scanStatus"></div>
         <button class="btn-scan" id="scanBtn" onclick="toggleScan()">Démarrer le scan</button>
       </div>
@@ -1243,6 +1244,43 @@ let repTempos = [];
 let positioned = false;
 let positioningStartTime = null;
 let currentExercise = 'squat';
+let voiceEnabled = localStorage.getItem('formghost_voice') !== 'off';
+let lastSpeakTime = 0;
+let frVoice = null;
+let repValgusFlagged = false;
+let repBackFlagged = false;
+let lastValgusRatio = 0;
+let lastBackAngle = 0;
+
+function pickFrenchVoice() {
+  if (!window.speechSynthesis) return;
+  var voices = window.speechSynthesis.getVoices();
+  frVoice = voices.find(function(v) { return v.lang === 'fr-FR'; }) || voices.find(function(v) { return v.lang && v.lang.indexOf('fr') === 0; }) || null;
+}
+if (window.speechSynthesis) {
+  window.speechSynthesis.onvoiceschanged = pickFrenchVoice;
+  pickFrenchVoice();
+}
+
+function speak(text, force) {
+  if (!voiceEnabled || !window.speechSynthesis) return;
+  var now = performance.now();
+  if (!force && now - lastSpeakTime < 1400) return;
+  lastSpeakTime = now;
+  window.speechSynthesis.cancel();
+  var u = new SpeechSynthesisUtterance(text);
+  u.lang = 'fr-FR';
+  if (frVoice) u.voice = frVoice;
+  u.rate = 1.05;
+  window.speechSynthesis.speak(u);
+}
+
+window.toggleVoice = function() {
+  voiceEnabled = !voiceEnabled;
+  localStorage.setItem('formghost_voice', voiceEnabled ? 'on' : 'off');
+  document.getElementById('voiceToggleBtn').textContent = 'Coach vocal : ' + (voiceEnabled ? 'Actif' : 'Coupe');
+  if (!voiceEnabled && window.speechSynthesis) window.speechSynthesis.cancel();
+};
 let mediaRecorder = null;
 let recordedChunks = [];
 let compositeCanvas = null;
@@ -1414,6 +1452,7 @@ function trackMetricsSquat(lm) {
   if (hipWidth > 0.01) {
     const valgusRatio = Math.abs(kneeR.x - ankleR.x) / hipWidth;
     maxValgusRatio = Math.max(maxValgusRatio, valgusRatio);
+    lastValgusRatio = valgusRatio;
   }
 
   if (shoulderL && shoulderR && hipL && hipR) {
@@ -1425,6 +1464,7 @@ function trackMetricsSquat(lm) {
     if (mag > 0.001) {
       const backAngle = Math.acos(Math.min(1, Math.max(-1, -dy / mag))) * (180 / Math.PI);
       maxBackAngle = Math.max(maxBackAngle, backAngle);
+      lastBackAngle = backAngle;
     }
   }
 
@@ -1450,6 +1490,7 @@ function trackMetricsPompes(lm) {
     const midX = (shR.x + wrR.x) / 2;
     const flareRatio = Math.abs(elR.x - midX) / shoulderWidth;
     maxValgusRatio = Math.max(maxValgusRatio, flareRatio);
+    lastValgusRatio = flareRatio;
   }
 
   if (shR && hipR && ankR) {
@@ -1462,6 +1503,7 @@ function trackMetricsPompes(lm) {
       const lineAngle = Math.acos(Math.min(1, Math.max(-1, dot / (m1 * m2)))) * (180 / Math.PI);
       const sag = Math.abs(180 - lineAngle);
       maxBackAngle = Math.max(maxBackAngle, sag);
+      lastBackAngle = sag;
     }
   }
 
@@ -1505,6 +1547,7 @@ function detectLoop() {
           document.getElementById('scanStatus').textContent = 'Scan en cours...';
           document.getElementById('recDot').style.display = 'flex';
           sessionStartTime = Date.now();
+          speak((currentExercise === 'pompes' ? 'Pompes' : 'Squat') + ' d\u00e9tect\u00e9, c\'est parti', true);
         }
       } else {
         positioningStartTime = null;
@@ -1520,17 +1563,28 @@ function detectLoop() {
       if (minRightKneeAngle < prevMinAngle) {
         captureBestFrame(lm);
       }
-      if (repPhase === 'up' && angle < EXERCISE_CONFIG[currentExercise].down) {
+      var cfgLive = EXERCISE_CONFIG[currentExercise];
+      if (repPhase === 'up' && angle < cfgLive.down) {
         repPhase = 'down';
         currentRepMinAngle = angle;
         repDownStartTime = performance.now();
         repBottomTime = performance.now();
+        repValgusFlagged = false;
+        repBackFlagged = false;
       } else if (repPhase === 'down') {
         if (angle < currentRepMinAngle) {
           repBottomTime = performance.now();
         }
         currentRepMinAngle = Math.min(currentRepMinAngle, angle);
-        if (angle > EXERCISE_CONFIG[currentExercise].up) {
+        if (!repValgusFlagged && lastValgusRatio > cfgLive.alignMed) {
+          repValgusFlagged = true;
+          speak(currentExercise === 'squat' ? 'Genoux vers l\'exterieur' : 'Coudes plus proches du corps');
+        }
+        if (!repBackFlagged && lastBackAngle > cfgLive.postureMed) {
+          repBackFlagged = true;
+          speak(currentExercise === 'squat' ? 'Garde le dos droit' : 'Gaine le corps');
+        }
+        if (angle > cfgLive.up) {
           repPhase = 'up';
           repCount++;
           var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(currentRepMinAngle - 90) * 1.1)));
@@ -1539,6 +1593,11 @@ function detectLoop() {
           var upDur = (performance.now() - repBottomTime) / 1000;
           repTempos.push({ down: downDur, up: upDur });
           document.getElementById('readoutReps').textContent = repCount;
+          if (currentRepMinAngle > cfgLive.depthMed) {
+            speak('Descends plus bas', true);
+          } else if (!repValgusFlagged && !repBackFlagged && repCount % 3 === 0) {
+            speak('Bien jou\u00e9, ' + repCount, true);
+          }
         }
       }
       document.getElementById('readoutAngle').textContent = Math.round(angle) + '°';
@@ -1819,6 +1878,7 @@ function showResults() {
     : bestScore;
   document.getElementById('resultScore').textContent = displayScore !== null ? displayScore : '—';
   document.getElementById('adviceText').textContent = buildAdvice({ depth: depthRating, valgus: valgusRating, back: backRating, sym: symRating });
+  speak('Séance terminée, score ' + (displayScore !== null ? displayScore : 0), true);
 
   var avgDownTempo = null, avgUpTempo = null;
   if (repTempos.length > 0) {
