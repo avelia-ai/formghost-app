@@ -1221,6 +1221,7 @@ let video, canvas, ctx;
 let sessionStartTime = null;
 
 let minRightKneeAngle = Infinity;
+let maxOverallAngle = -Infinity;
 let maxValgusRatio = 0;
 let maxBackAngle = 0;
 let maxKneeDiff = 0;
@@ -1238,6 +1239,7 @@ let repPhase = 'up';
 let repCount = 0;
 let repScores = [];
 let currentRepMinAngle = null;
+let currentRepMaxAngle = null;
 let repDownStartTime = null;
 let repBottomTime = null;
 let repTempos = [];
@@ -1289,6 +1291,8 @@ let compositeCtx = null;
 var EXERCISE_CONFIG = {
   squat: {
     mode: 'rep',
+    direction: 'flex',
+    idealAngle: 90,
     down: 120, up: 160,
     depthGood: 100, depthMed: 120,
     alignGood: 0.15, alignMed: 0.35, alignLabel: 'Alignement genoux',
@@ -1303,6 +1307,8 @@ var EXERCISE_CONFIG = {
   },
   pompes: {
     mode: 'rep',
+    direction: 'flex',
+    idealAngle: 90,
     down: 100, up: 150,
     depthGood: 80, depthMed: 100,
     alignGood: 0.20, alignMed: 0.40, alignLabel: 'Ecartement des coudes',
@@ -1458,6 +1464,7 @@ function trackMetricsGeneric(lm) {
   if (!lm[p[0]] || !lm[p[1]] || !lm[p[2]]) return null;
   var primaryAngle = angleBetween(lm[p[0]], lm[p[1]], lm[p[2]]);
   minRightKneeAngle = Math.min(minRightKneeAngle, primaryAngle);
+  maxOverallAngle = Math.max(maxOverallAngle, primaryAngle);
 
   var alignVal = 0;
   if (cfg.alignType === 'valgus') {
@@ -1640,18 +1647,25 @@ function detectLoop() {
         captureBestFrame(lm);
       }
       var cfgLive = EXERCISE_CONFIG[currentExercise];
+      var isExtend = cfgLive.direction === 'extend';
+      var idealA = cfgLive.idealAngle || 90;
       if (repPhase === 'up' && angle < cfgLive.down) {
         repPhase = 'down';
         currentRepMinAngle = angle;
+        currentRepMaxAngle = angle;
         repDownStartTime = performance.now();
         repBottomTime = performance.now();
         repValgusFlagged = false;
         repBackFlagged = false;
       } else if (repPhase === 'down') {
         if (angle < currentRepMinAngle) {
-          repBottomTime = performance.now();
+          if (!isExtend) repBottomTime = performance.now();
+        }
+        if (angle > currentRepMaxAngle) {
+          if (isExtend) repBottomTime = performance.now();
         }
         currentRepMinAngle = Math.min(currentRepMinAngle, angle);
+        currentRepMaxAngle = Math.max(currentRepMaxAngle, angle);
         if (!repValgusFlagged && lastValgusRatio > cfgLive.alignMed) {
           repValgusFlagged = true;
           speak(currentExercise === 'squat' ? 'Genoux vers l\'exterieur' : 'Coudes plus proches du corps');
@@ -1663,14 +1677,16 @@ function detectLoop() {
         if (angle > cfgLive.up) {
           repPhase = 'up';
           repCount++;
-          var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(currentRepMinAngle - 90) * 1.1)));
+          var repExtreme = isExtend ? currentRepMaxAngle : currentRepMinAngle;
+          var repScore = Math.max(0, Math.min(100, Math.round(100 - Math.abs(repExtreme - idealA) * 1.1)));
           repScores.push(repScore);
           var downDur = (repBottomTime - repDownStartTime) / 1000;
           var upDur = (performance.now() - repBottomTime) / 1000;
           repTempos.push({ down: downDur, up: upDur });
           document.getElementById('readoutReps').textContent = repCount;
-          if (currentRepMinAngle > cfgLive.depthMed) {
-            speak('Descends plus bas', true);
+          var depthBad = isExtend ? (repExtreme < cfgLive.depthMed) : (repExtreme > cfgLive.depthMed);
+          if (depthBad) {
+            speak('Amplitude incompl\u00e8te', true);
           } else if (!repValgusFlagged && !repBackFlagged && repCount % 3 === 0) {
             speak('Bien jou\u00e9, ' + repCount, true);
           }
@@ -1760,6 +1776,7 @@ async function startScan() {
 
   bestScore = null;
   minRightKneeAngle = Infinity;
+  maxOverallAngle = -Infinity;
   maxValgusRatio = 0;
   maxBackAngle = 0;
   maxKneeDiff = 0;
@@ -1783,6 +1800,12 @@ async function startScan() {
   status.textContent = 'Place-toi bien dans le cadre, corps entier visible.';
 
   detectLoop();
+}
+
+function rateMetricInverse(value, goodMin, mediumMin) {
+  if (value >= goodMin) return 'bon';
+  if (value >= mediumMin) return 'moyen';
+  return 'mauvais';
 }
 
 function rateMetric(value, goodMax, mediumMax) {
@@ -1916,7 +1939,8 @@ function showResults() {
   var kneeFlagged = currentExercise === 'squat' && injuries.indexOf('genou') !== -1;
   var backFlagged = currentExercise === 'squat' && (injuries.indexOf('dos') !== -1 || injuries.indexOf('lombaire') !== -1);
 
-  const depthRating = rateMetric(minRightKneeAngle, cfg.depthGood, cfg.depthMed);
+  var depthValue = cfg.direction === 'extend' ? maxOverallAngle : minRightKneeAngle;
+  const depthRating = cfg.direction === 'extend' ? rateMetricInverse(depthValue, cfg.depthGood, cfg.depthMed) : rateMetric(depthValue, cfg.depthGood, cfg.depthMed);
   const valgusRating = kneeFlagged ? rateMetric(maxValgusRatio, cfg.alignGood * 0.67, cfg.alignMed * 0.71) : rateMetric(maxValgusRatio, cfg.alignGood, cfg.alignMed);
   const backRating = backFlagged ? rateMetric(maxBackAngle, cfg.postureGood * 0.72, cfg.postureMed * 0.75) : rateMetric(maxBackAngle, cfg.postureGood, cfg.postureMed);
   const symRating = rateMetric(maxKneeDiff, 8, 15);
