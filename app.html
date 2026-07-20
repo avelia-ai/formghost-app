@@ -1288,18 +1288,32 @@ let compositeCtx = null;
 
 var EXERCISE_CONFIG = {
   squat: {
+    mode: 'rep',
     down: 120, up: 160,
     depthGood: 100, depthMed: 120,
     alignGood: 0.15, alignMed: 0.35, alignLabel: 'Alignement genoux',
     postureGood: 25, postureMed: 40, postureLabel: 'Posture du dos',
-    symLabel: 'Symetrie'
+    symLabel: 'Symetrie',
+    primary: [24, 26, 28],
+    secondary: [23, 25, 27],
+    alignType: 'valgus',
+    alignJoints: { point: 26, ref: 28, widthA: 24, widthB: 23 },
+    postureType: 'lean',
+    postureJoints: { shoulderL: 11, shoulderR: 12, hipL: 23, hipR: 24 }
   },
   pompes: {
+    mode: 'rep',
     down: 100, up: 150,
     depthGood: 80, depthMed: 100,
     alignGood: 0.20, alignMed: 0.40, alignLabel: 'Ecartement des coudes',
     postureGood: 12, postureMed: 25, postureLabel: 'Alignement du corps',
-    symLabel: 'Symetrie bras'
+    symLabel: 'Symetrie bras',
+    primary: [12, 14, 16],
+    secondary: [11, 13, 15],
+    alignType: 'flare',
+    alignJoints: { point: 14, refA: 12, refB: 16, widthA: 12, widthB: 11 },
+    postureType: 'sag',
+    postureJoints: { shoulder: 12, hip: 24, ankle: 28 }
   }
 };
 
@@ -1435,8 +1449,70 @@ function drawSkeleton(landmarks) {
 }
 
 function trackMetrics(lm) {
-  if (currentExercise === 'pompes') return trackMetricsPompes(lm);
-  return trackMetricsSquat(lm);
+  return trackMetricsGeneric(lm);
+}
+
+function trackMetricsGeneric(lm) {
+  var cfg = EXERCISE_CONFIG[currentExercise];
+  var p = cfg.primary, s = cfg.secondary;
+  if (!lm[p[0]] || !lm[p[1]] || !lm[p[2]]) return null;
+  var primaryAngle = angleBetween(lm[p[0]], lm[p[1]], lm[p[2]]);
+  minRightKneeAngle = Math.min(minRightKneeAngle, primaryAngle);
+
+  var alignVal = 0;
+  if (cfg.alignType === 'valgus') {
+    var aj = cfg.alignJoints;
+    var point = lm[aj.point], ref = lm[aj.ref], wA = lm[aj.widthA], wB = lm[aj.widthB];
+    if (point && ref && wA && wB) {
+      var width = Math.abs(wA.x - wB.x);
+      if (width > 0.01) alignVal = Math.abs(point.x - ref.x) / width;
+    }
+  } else if (cfg.alignType === 'flare') {
+    var aj2 = cfg.alignJoints;
+    var point2 = lm[aj2.point], refA = lm[aj2.refA], refB = lm[aj2.refB], wA2 = lm[aj2.widthA], wB2 = lm[aj2.widthB];
+    if (point2 && refA && refB && wA2 && wB2) {
+      var midX = (refA.x + refB.x) / 2;
+      var width2 = Math.abs(wA2.x - wB2.x);
+      if (width2 > 0.01) alignVal = Math.abs(point2.x - midX) / width2;
+    }
+  }
+  maxValgusRatio = Math.max(maxValgusRatio, alignVal);
+  lastValgusRatio = alignVal;
+
+  var postureVal = 0;
+  if (cfg.postureType === 'lean') {
+    var pj = cfg.postureJoints;
+    var shL = lm[pj.shoulderL], shR = lm[pj.shoulderR], hipL = lm[pj.hipL], hipR = lm[pj.hipR];
+    if (shL && shR && hipL && hipR) {
+      var midShX = (shL.x + shR.x) / 2, midShY = (shL.y + shR.y) / 2;
+      var midHipX = (hipL.x + hipR.x) / 2, midHipY = (hipL.y + hipR.y) / 2;
+      var dx = midShX - midHipX, dy = midShY - midHipY;
+      var mag = Math.sqrt(dx * dx + dy * dy);
+      if (mag > 0.001) postureVal = Math.acos(Math.min(1, Math.max(-1, -dy / mag))) * (180 / Math.PI);
+    }
+  } else if (cfg.postureType === 'sag') {
+    var pj2 = cfg.postureJoints;
+    var sh2 = lm[pj2.shoulder], hip2 = lm[pj2.hip], ank2 = lm[pj2.ankle];
+    if (sh2 && hip2 && ank2) {
+      var v1 = { x: sh2.x - hip2.x, y: sh2.y - hip2.y };
+      var v2 = { x: ank2.x - hip2.x, y: ank2.y - hip2.y };
+      var dot = v1.x * v2.x + v1.y * v2.y;
+      var m1 = Math.sqrt(v1.x * v1.x + v1.y * v1.y), m2 = Math.sqrt(v2.x * v2.x + v2.y * v2.y);
+      if (m1 > 0 && m2 > 0) {
+        var lineAngle = Math.acos(Math.min(1, Math.max(-1, dot / (m1 * m2)))) * (180 / Math.PI);
+        postureVal = Math.abs(180 - lineAngle);
+      }
+    }
+  }
+  maxBackAngle = Math.max(maxBackAngle, postureVal);
+  lastBackAngle = postureVal;
+
+  if (s && lm[s[0]] && lm[s[1]] && lm[s[2]]) {
+    var secondaryAngle = angleBetween(lm[s[0]], lm[s[1]], lm[s[2]]);
+    maxKneeDiff = Math.max(maxKneeDiff, Math.abs(primaryAngle - secondaryAngle));
+  }
+
+  return primaryAngle;
 }
 
 function trackMetricsSquat(lm) {
